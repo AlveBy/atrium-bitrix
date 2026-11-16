@@ -32,6 +32,7 @@ final class BitrixServiceProvider extends ServiceProvider
             Commands\MigrateDataCommand::class,
             Commands\MigrateMediaLibraryCommand::class,
             Commands\MigrateSeoCommand::class,
+            Commands\MigrateSitesCommand::class,
             Commands\ParityAuditCommand::class,
             Commands\SyncDataCommand::class,
             Commands\VerifyDataCommand::class,

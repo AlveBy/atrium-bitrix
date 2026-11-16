@@ -299,6 +299,43 @@ final class SyntheticBitrix
             $t->integer('COLLECTION_ID');
             $t->integer('ITEM_ID');
         });
+
+        $schema->create('b_lang', function (Blueprint $t): void {
+            $t->char('LID', 2)->primary();
+            $t->integer('SORT')->default(100);
+            $t->char('DEF', 1)->default('N');
+            $t->char('ACTIVE', 1)->default('Y');
+            $t->string('NAME');
+            $t->string('DIR');
+            $t->char('LANGUAGE_ID', 2);
+            $t->string('SERVER_NAME')->nullable();
+            $t->char('DOMAIN_LIMITED', 1)->default('N');
+        });
+
+        $schema->create('b_lang_domain', function (Blueprint $t): void {
+            $t->char('LID', 2);
+            $t->string('DOMAIN');
+        });
+    }
+
+    /**
+     * Three sites on one domain, the Bitrix way: the main one at the root,
+     * the English one in /en/, a third one in /site2/ on any domain.
+     */
+    public static function seedSites(Connection $db): void
+    {
+        $db->table('b_lang')->insert([
+            ['LID' => 's1', 'SORT' => 1, 'DEF' => 'Y', 'ACTIVE' => 'Y', 'NAME' => 'Shop', 'DIR' => '/', 'LANGUAGE_ID' => 'ru', 'SERVER_NAME' => 'example.com'],
+            ['LID' => 's2', 'SORT' => 2, 'DEF' => 'N', 'ACTIVE' => 'Y', 'NAME' => 'Shop (English)', 'DIR' => '/en/', 'LANGUAGE_ID' => 'en', 'SERVER_NAME' => 'example.com'],
+            ['LID' => 's3', 'SORT' => 3, 'DEF' => 'N', 'ACTIVE' => 'N', 'NAME' => 'Second site', 'DIR' => '/site2/', 'LANGUAGE_ID' => 'ru', 'SERVER_NAME' => null],
+        ]);
+
+        $db->table('b_lang_domain')->insert([
+            ['LID' => 's1', 'DOMAIN' => 'example.com'],
+            ['LID' => 's1', 'DOMAIN' => 'WWW.Example.com:443'],
+            ['LID' => 's2', 'DOMAIN' => 'example.com'],
+            ['LID' => 's2', 'DOMAIN' => 'www.example.com'],
+        ]);
     }
 
     private static function seed(Connection $db): void
@@ -486,6 +523,8 @@ final class SyntheticBitrix
         $db->table('b_medialib_collection_item')->insert([
             ['COLLECTION_ID' => 1, 'ITEM_ID' => 1],
         ]);
+
+        self::seedSites($db);
     }
 
     /**

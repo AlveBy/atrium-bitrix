@@ -50,6 +50,11 @@ class MigrateAllCommand extends AbstractBitrixCommand
             '--hlblock' => $hlblockOption,
         ]);
 
+        // Sites with their folders and domains: they do not depend on iblocks.
+        $this->newLine();
+        $this->info('Moving sites...');
+        $this->call('atrium:bitrix:migrate:sites', ['--connection' => $this->option('connection')]);
+
         // Get selection if not provided
         $iblockIds = $iblockOption ?: $this->selectIBlocks();
         $hlblockIds = $hlblockOption ?: $this->selectHlblocks();

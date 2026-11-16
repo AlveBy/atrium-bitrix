@@ -17,6 +17,7 @@ Add a connection to the Bitrix database in `config/database.php` (the default na
 
 ```bash
 php artisan atrium:bitrix:analyze               # what the old database holds
+php artisan atrium:bitrix:migrate:sites
 php artisan atrium:bitrix:generate:migrations
 php artisan migrate
 php artisan atrium:bitrix:generate:models
@@ -30,6 +31,7 @@ php artisan atrium:bitrix:parity                # before against after
 
 ## What moves
 
+- Sites (`b_lang`) with their domains (`b_lang_domain`, the server name first). LID becomes the code, `DIR` becomes the folder: `DIR` `/` is no folder, `/site2/` opens the site at `example.com/site2/` as before. The Bitrix default site becomes the Atrium default site; Atrium opens the default site at the root, so a default site kept in a folder (`/ru/`) moves to the root with a warning, and its old addresses need a redirect. Run it again after changes in Bitrix: sites are matched by code.
 - Iblocks become models and tables: base fields, every property type (strings, numbers, lists, files, links to elements and sections, highload directories, HTML, dates, maps), multiple values, sections with their tree and `UF_*` fields, highload blocks.
 - The admin form looks like the one editors had: tabs and field order from the saved Bitrix form layout, list columns from the saved list settings, captions such as "Add product" from the iblock messages.
 - SEO: meta title, description, keywords, page heading, picture ALT and TITLE, tags.
@@ -37,7 +39,7 @@ php artisan atrium:bitrix:parity                # before against after
 
 ## Checking
 
-`atrium:bitrix:parity` compares every iblock and property with the generated models and the copied rows: counts, columns, widgets, required flags, list options, form tabs and order, list columns. An empty report means nothing was lost. `--format=json` or `--format=markdown` writes it to a file; the command fails when something is missing.
+`atrium:bitrix:parity` compares every iblock and property with the generated models and the copied rows: counts, columns, widgets, required flags, list options, form tabs and order, list columns, and every site: its folder, domains and active flag. An empty report means nothing was lost. `--format=json` or `--format=markdown` writes it to a file; the command fails when something is missing.
 
 `atrium:bitrix:verify` spot-checks records and files.
 

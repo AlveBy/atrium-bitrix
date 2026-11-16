@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Atrium\Bitrix\Tests;
 
 use Atrium\Admin\AtriumServiceProvider;
+use Atrium\Admin\Models\Site;
 use Atrium\Bitrix\BitrixServiceProvider;
 use Atrium\Bitrix\Tests\Fixtures\SyntheticBitrix;
 use Illuminate\Filesystem\Filesystem;
@@ -105,6 +106,7 @@ final class FullRunTest extends TestCase
         $this->artisan('atrium:bitrix:migrate:data', ['--force' => true, '--no-interaction' => true])->assertSuccessful();
         $this->artisan('atrium:bitrix:migrate:seo', ['--force' => true, '--no-interaction' => true])->assertSuccessful();
         $this->artisan('atrium:bitrix:migrate:medialibrary', ['--no-interaction' => true])->assertSuccessful();
+        $this->artisan('atrium:bitrix:migrate:sites')->assertSuccessful();
 
         $report = $this->workDir.'/parity.json';
         $exit = Artisan::call('atrium:bitrix:parity', ['--format' => 'json', '--output' => $report]);
@@ -120,6 +122,7 @@ final class FullRunTest extends TestCase
         $this->assertMatchesRegularExpression('/Widgets vs\. property settings in Bitrix\s+No mismatches\./', $output);
 
         $this->assertDataArrived();
+        $this->assertCount(3, json_decode($json, true)['sites']);
 
         $this->artisan('atrium:bitrix:analyze')->assertSuccessful();
         $this->artisan('atrium:bitrix:verify', ['--force' => true, '--check-files' => true, '--no-interaction' => true])->assertSuccessful();
@@ -137,6 +140,11 @@ final class FullRunTest extends TestCase
         DB::table('news')->where('bitrix_id', 4)->delete();
         $this->assertSame(1, Artisan::call('atrium:bitrix:parity'));
         $this->assertStringContainsString('SHORT by 1', Artisan::output());
+
+        // So does a site that no longer sits where it did in Bitrix.
+        Site::query()->where('code', 's2')->sole()->update(['folder' => 'english']);
+        Artisan::call('atrium:bitrix:parity');
+        $this->assertStringContainsString('Site s2 (/en/) → s2: FOLDER_MISMATCH', Artisan::output());
     }
 
     /**
@@ -192,7 +200,7 @@ final class FullRunTest extends TestCase
     {
         $this->assertIsArray($report);
 
-        $rows = array_merge($report['iblocks'], $report['properties'], $report['extra_fields']);
+        $rows = array_merge($report['iblocks'], $report['properties'], $report['extra_fields'], $report['sites']);
 
         return array_values(array_filter(
             $rows,

@@ -9,6 +9,7 @@ use Atrium\Bitrix\Schema\IBlockProperty;
 use Atrium\Bitrix\Support\BitrixConnection;
 use Atrium\Bitrix\Support\BitrixFormLayout;
 use Atrium\Bitrix\Support\BitrixListLayout;
+use Atrium\Bitrix\Support\BitrixSites;
 use Atrium\Bitrix\Support\NamingConvention;
 use Atrium\Bitrix\Support\ProjectFields;
 use Illuminate\Console\Command;
@@ -69,6 +70,12 @@ class ParityAuditCommand extends Command
     /** @var array<int,array<string,mixed>> */
     protected array $extraRows = [];
 
+    /** @var array<int,array<string,mixed>> */
+    protected array $siteRows = [];
+
+    /** A Bitrix default site in a folder: Atrium keeps its default site at the root. */
+    public const S_DEFAULT_AT_ROOT = 'DEFAULT_AT_ROOT';
+
     /**
      * Bitrix base element fields that every IBlock has, mapped to the column
      * our migrator generates for them.
@@ -111,6 +118,8 @@ class ParityAuditCommand extends Command
         foreach ($iblocks as $iblock) {
             $this->auditIBlock($iblock);
         }
+
+        $this->auditSites();
 
         $exitCode = $this->report();
 
@@ -733,6 +742,53 @@ class ParityAuditCommand extends Command
         );
     }
 
+    /**
+     * Every Bitrix site (b_lang) against the Atrium sites: there, in the same
+     * folder (DIR), on the same domains, as active.
+     */
+    protected function auditSites(): void
+    {
+        foreach ((new BitrixSites($this->bitrix))->all() as $site) {
+            $expected = $site['attributes'];
+            $target = BitrixSites::target($site);
+            $folder = $site['default'] ? null : $expected['folder'];
+            $problems = [];
+
+            if ($target === null) {
+                $status = 'NO_SITE';
+            } else {
+                if ($target->folder !== $folder) {
+                    $problems[] = 'FOLDER_MISMATCH';
+                }
+
+                $ours = (array) $target->domains;
+                sort($ours);
+                $theirs = $expected['domains'];
+                sort($theirs);
+
+                if ($theirs !== [] && $ours !== $theirs) {
+                    $problems[] = 'DOMAINS_MISMATCH';
+                }
+
+                if (! $site['default'] && $target->active !== $expected['active']) {
+                    $problems[] = 'ACTIVE_MISMATCH';
+                }
+
+                $status = $problems[0] ?? ($site['default'] && $expected['folder'] !== null ? self::S_DEFAULT_AT_ROOT : self::S_OK);
+            }
+
+            $this->siteRows[] = [
+                'lid' => $site['lid'],
+                'dir' => $site['dir'],
+                'domains' => implode(', ', $expected['domains']),
+                'site' => $target?->code,
+                'folder' => $target === null ? null : ($target->folder === null ? '/' : '/'.$target->folder.'/'),
+                'our_domains' => $target === null ? null : implode(', ', (array) $target->domains),
+                'status' => $status,
+            ];
+        }
+    }
+
     protected function dataStatus(int $bitrixCount, ?int $ourCount): string
     {
         if ($ourCount === null) {
@@ -781,6 +837,7 @@ class ParityAuditCommand extends Command
                 'iblocks' => $this->iblockRows,
                 'properties' => $this->rows,
                 'extra_fields' => $this->extraRows,
+                'sites' => $this->siteRows,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
             'markdown' => $this->renderMarkdown($problems),
             default => null,
@@ -817,11 +874,31 @@ class ParityAuditCommand extends Command
             $this->error(sprintf('%s → %s: %s', $r['iblock'], $r['table'] ?? '—', $r['status']));
         }
 
-        return $problems === [] && $dataLost === [] ? self::SUCCESS : self::FAILURE;
+        $sitesLost = array_filter(
+            $this->siteRows,
+            static fn (array $r): bool => ! in_array($r['status'], [self::S_OK, self::S_DEFAULT_AT_ROOT], true)
+        );
+
+        foreach ($sitesLost as $r) {
+            $this->error(sprintf('Site %s (%s) → %s: %s', $r['lid'], $r['dir'], $r['site'] ?? '—', $r['status']));
+        }
+
+        return $problems === [] && $dataLost === [] && $sitesLost === [] ? self::SUCCESS : self::FAILURE;
     }
 
     protected function renderTable(array $problems): void
     {
+        if ($this->siteRows !== []) {
+            $this->newLine();
+            $this->line('<comment>Sites: Bitrix b_lang → Atrium</comment>');
+            $this->table(
+                ['LID', 'DIR', 'Domains', 'Site', 'Folder', 'Domains here', 'Status'],
+                array_map(static fn (array $r): array => [
+                    $r['lid'], $r['dir'], $r['domains'] ?: '—', $r['site'] ?? '—', $r['folder'] ?? '—', $r['our_domains'] ?: '—', $r['status'],
+                ], $this->siteRows)
+            );
+        }
+
         $this->newLine();
         $this->line('<comment>IBlock → model mapping and data volume</comment>');
         $this->table(
@@ -876,6 +953,16 @@ class ParityAuditCommand extends Command
         ];
         foreach ($byStatus as $status => $rows) {
             $out .= sprintf("| `%s` | %d | %s |\n", $status, count($rows), $meanings[$status] ?? '');
+        }
+
+        if ($this->siteRows !== []) {
+            $out .= "\n## Sites\n\n| LID | DIR | Domains | Site | Folder | Domains here | Status |\n|---|---|---|---|---|---|---|\n";
+            foreach ($this->siteRows as $r) {
+                $out .= sprintf(
+                    "| %s | `%s` | %s | %s | `%s` | %s | %s |\n",
+                    $r['lid'], $r['dir'], $r['domains'] ?: '—', $r['site'] ?? '—', $r['folder'] ?? '—', $r['our_domains'] ?: '—', $r['status']
+                );
+            }
         }
 
         $out .= "\n## Iblocks and data volume\n\n";
