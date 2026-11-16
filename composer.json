@@ -1,0 +1,50 @@
+{
+    "name": "alveby/atrium-bitrix",
+    "description": "Move a 1C-Bitrix site to Laravel and Atrium: models, migrations, data, forms and SEO",
+    "type": "library",
+    "license": "MIT",
+    "homepage": "https://github.com/AlveBy/atrium",
+    "keywords": [
+        "laravel",
+        "admin",
+        "cms",
+        "bitrix",
+        "migration",
+        "multisite",
+        "i18n"
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/support": "^13.0",
+        "alveby/atrium": "@dev"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^11.0",
+        "phpunit/phpunit": "^12.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Atrium\\Bitrix\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Atrium\\Bitrix\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Atrium\\Bitrix\\BitrixServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../admin"
+        }
+    ]
+}
