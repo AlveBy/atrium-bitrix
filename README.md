@@ -62,6 +62,10 @@ After regenerating models, look at `git diff`: generated files are meant to be r
 
 [MIGRATION-QA.md](MIGRATION-QA.md) is a checklist for accepting a moved site.
 
+## Contributing
+
+This repository is a read-only copy of `packages/bitrix` in [AlveBy/atrium](https://github.com/AlveBy/atrium). Issues and pull requests go there.
+
 ## License
 
 MIT
