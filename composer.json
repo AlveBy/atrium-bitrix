@@ -16,7 +16,10 @@
     "require": {
         "php": "^8.3",
         "illuminate/support": "^13.0",
-        "alveby/atrium": "@dev"
+        "alveby/atrium": "@dev",
+        "nette/php-generator": "^4.1",
+        "illuminate/console": "^13.0",
+        "illuminate/database": "^13.0"
     },
     "require-dev": {
         "orchestra/testbench": "^11.0",

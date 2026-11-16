@@ -15,10 +15,26 @@ final class BitrixServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        if ($this->app->runningInConsole()) {
-            $this->publishes([
-                __DIR__.'/../config/atrium-bitrix.php' => config_path('atrium-bitrix.php'),
-            ], 'atrium-bitrix-config');
+        if (! $this->app->runningInConsole()) {
+            return;
         }
+
+        $this->publishes([
+            __DIR__.'/../config/atrium-bitrix.php' => config_path('atrium-bitrix.php'),
+        ], 'atrium-bitrix-config');
+
+        $this->commands([
+            Commands\AnalyzeBitrixCommand::class,
+            Commands\DownloadUploadCommand::class,
+            Commands\GenerateMigrationsCommand::class,
+            Commands\GenerateModelsCommand::class,
+            Commands\MigrateAllCommand::class,
+            Commands\MigrateDataCommand::class,
+            Commands\MigrateMediaLibraryCommand::class,
+            Commands\MigrateSeoCommand::class,
+            Commands\ParityAuditCommand::class,
+            Commands\SyncDataCommand::class,
+            Commands\VerifyDataCommand::class,
+        ]);
     }
 }
