@@ -31,4 +31,14 @@ final class GeneratedPaths
 
         return base_path($relative);
     }
+
+    /**
+     * Where generated migrations go: the configured folder or database/migrations.
+     */
+    public static function migrations(): string
+    {
+        $path = config('atrium-bitrix.migration_path');
+
+        return is_string($path) && $path !== '' ? $path : database_path('migrations');
+    }
 }

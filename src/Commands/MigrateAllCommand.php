@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace Atrium\Bitrix\Commands;
 
+use Atrium\Bitrix\Support\GeneratedPaths;
+
 class MigrateAllCommand extends AbstractBitrixCommand
 {
     protected $signature = 'atrium:bitrix:migrate
@@ -118,9 +120,9 @@ class MigrateAllCommand extends AbstractBitrixCommand
 
         // Summary
         $this->info('Summary:');
-        $this->line('  - Models generated in: app/Models/');
-        $this->line('  - References generated in: app/Models/References/');
-        $this->line('  - Migrations generated in: database/migrations/');
+        $this->line('  - Models generated in: '.GeneratedPaths::directory('model_path', (string) config('atrium-bitrix.model_namespace')));
+        $this->line('  - References generated in: '.GeneratedPaths::directory('reference_path', (string) config('atrium-bitrix.reference_namespace')));
+        $this->line('  - Migrations generated in: '.GeneratedPaths::migrations());
         $this->newLine();
 
         $this->info('Next steps:');

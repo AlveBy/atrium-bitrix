@@ -12,6 +12,7 @@ namespace Atrium\Bitrix\Generators;
 use Atrium\Bitrix\Mappers\PropertyTypeMapper;
 use Atrium\Bitrix\Schema\HighloadBlock;
 use Atrium\Bitrix\Schema\IBlock;
+use Atrium\Bitrix\Support\GeneratedPaths;
 use Atrium\Bitrix\Support\NamingConvention;
 use Illuminate\Database\ConnectionInterface;
 
@@ -267,9 +268,7 @@ PHP;
      */
     public function getMigrationsPath(): string
     {
-        $path = config('atrium-bitrix.migration_path');
-
-        return is_string($path) && $path !== '' ? $path : database_path('migrations');
+        return GeneratedPaths::migrations();
     }
 
     /**

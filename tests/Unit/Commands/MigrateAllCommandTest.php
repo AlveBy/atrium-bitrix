@@ -27,6 +27,18 @@ final class MigrateAllCommandTest extends SyntheticTestCase
         $this->app->make('migrator')->path($this->workDir.'/migrations');
     }
 
+    public function test_without_configured_folders_the_summary_names_the_default_ones(): void
+    {
+        config(['atrium-bitrix.model_namespace' => 'App\\Models', 'atrium-bitrix.reference_namespace' => 'App\\Models\\References']);
+        config(['atrium-bitrix.model_path' => null, 'atrium-bitrix.reference_path' => null, 'atrium-bitrix.migration_path' => null]);
+
+        $this->artisan('atrium:bitrix:migrate', ['--force' => true, '--skip-models' => true, '--skip-migrations' => true, '--skip-data' => true, '--skip-files' => true, '--iblock' => [1], '--hlblock' => [1]])
+            ->expectsOutput('  - Models generated in: '.app_path('Models'))
+            ->expectsOutput('  - References generated in: '.app_path('Models/References'))
+            ->expectsOutput('  - Migrations generated in: '.database_path('migrations'))
+            ->assertSuccessful();
+    }
+
     public function test_a_forced_run_goes_through_every_step(): void
     {
         $this->artisan('atrium:bitrix:migrate', ['--force' => true, '--skip-files' => true, '--no-interaction' => true])
@@ -37,7 +49,9 @@ final class MigrateAllCommandTest extends SyntheticTestCase
             ->expectsOutput('Step 3: Generating Eloquent models...')
             ->expectsOutput('Step 4: Migrating data...')
             ->expectsOutput('║     Migration complete!                ║')
-            ->expectsOutput('  - Models generated in: app/Models/')
+            ->expectsOutput('  - Models generated in: '.$this->workDir.'/models')
+            ->expectsOutput('  - References generated in: '.$this->workDir.'/models/References')
+            ->expectsOutput('  - Migrations generated in: '.$this->workDir.'/migrations')
             ->expectsOutput('  4. Configure SEO and slugs')
             ->assertSuccessful();
 
