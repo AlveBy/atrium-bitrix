@@ -209,11 +209,12 @@ final class PropertyTypeMapperTest extends TestCase
         yield 'single file' => [self::property('F'), true];
         yield 'multiple files' => [self::property('F', null, true), true];
         yield 'multiple strings' => [self::property('S', null, true), true];
-        yield 'multiple directory values' => [self::property('S', 'directory', true), true];
+        yield 'multiple directory values live in a pivot too' => [self::property('S', 'directory', true), false];
+        yield 'single directory value' => [self::property('S', 'directory'), true];
     }
 
     #[DataProvider('fillables')]
-    public function test_only_multiple_links_are_kept_out_of_fillable(IBlockProperty $property, bool $expected): void
+    public function test_only_what_lives_in_a_pivot_is_kept_out_of_fillable(IBlockProperty $property, bool $expected): void
     {
         $this->assertSame($expected, (new PropertyTypeMapper)->isFillable($property));
     }

@@ -189,12 +189,15 @@ class PropertyTypeMapper
      */
     public function isFillable(IBlockProperty $property): bool
     {
-        // Multiple links live in a pivot table: no column of their own, they are
-        // synced by AdminController::extractRelationValues().
+        // Whatever lives in a pivot table (multiple links, multiple directory values)
+        // has no column of its own: the admin form names it after the relation and
+        // AdminController::submittedData() takes it from the field list, not from
+        // $fillable. Putting a relation name into $fillable would let fill() try to
+        // store it as a column.
         // A SINGLE link, however, is a plain foreignId on the table itself
         // (e.g. a "Country" link). Excluding it from fillable produced a field
         // that is rendered and validated but silently never saved.
-        if (($property->isElementLink() || $property->isSectionLink()) && $property->multiple) {
+        if ($property->needsPivotTable()) {
             return false;
         }
 

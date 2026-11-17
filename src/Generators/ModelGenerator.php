@@ -290,15 +290,7 @@ class ModelGenerator
                 continue;
             }
 
-            // Multi-value directory properties live in a pivot table and are
-            // rendered as BelongsToManyField, which names itself with the camel
-            // plural (see generateFieldLine). $fillable has to use that exact
-            // name: AdminController::store() reads submitted relation values out
-            // of $request->only($fillable) before fill(), so a mismatch (PROFIT →
-            // fillable 'profit' vs field 'profits') means the pivot never syncs.
-            $fillable[] = $property->needsPivotTable()
-                ? Str::camel(Str::plural($columnName))
-                : $columnName;
+            $fillable[] = $columnName;
         }
 
         // Columns added by the project through separate migrations (see config):
