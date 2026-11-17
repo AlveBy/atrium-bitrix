@@ -62,8 +62,6 @@ class PropertyTypeMapper
 
         // Map by full type
         return match ($type) {
-            // String types
-            'S' => ['type' => 'string', 'nullable' => true, 'length' => 255],
             'S:HTML' => ['type' => 'longText', 'nullable' => true],
             'S:Date' => ['type' => 'date', 'nullable' => true],
             'S:DateTime' => ['type' => 'datetime', 'nullable' => true],
@@ -83,18 +81,9 @@ class PropertyTypeMapper
             // List type
             'L' => ['type' => 'string', 'nullable' => true, 'length' => 100],
 
-            // File type
-            'F' => $property->multiple
-                ? ['type' => 'json', 'nullable' => true]
-                : ['type' => 'string', 'nullable' => true, 'length' => 255],
-
-            // Element link
-            'E' => ['type' => 'foreignId', 'nullable' => true],
-
-            // Section link
-            'G' => ['type' => 'foreignId', 'nullable' => true],
-
-            // Default
+            // Everything else is a string of 255: plain strings, a single file and
+            // whatever Bitrix adds one day. Links never get here: they returned above,
+            // and so did a multiple file.
             default => ['type' => 'string', 'nullable' => true, 'length' => 255],
         };
     }
