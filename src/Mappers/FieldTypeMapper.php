@@ -393,14 +393,6 @@ class FieldTypeMapper
     }
 
     /**
-     * Get full column class name with namespace
-     */
-    public function getColumnClassName(string $shortName): string
-    {
-        return "Atrium\\Admin\\Columns\\{$shortName}";
-    }
-
-    /**
      * Check if property is a YES/NO enumeration (for BooleanColumn)
      */
     protected function isYesNoEnum(IBlockProperty $property): bool

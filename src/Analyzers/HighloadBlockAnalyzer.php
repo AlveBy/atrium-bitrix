@@ -175,32 +175,6 @@ class HighloadBlockAnalyzer
     }
 
     /**
-     * Get all linked Highload Block IDs (from hlblock type fields)
-     */
-    public function getLinkedHlblockIds(): array
-    {
-        $linkedIds = [];
-
-        foreach ($this->analyzedHlblocks as $hlblock) {
-            foreach ($hlblock->fields as $field) {
-                if ($field->isHlblockReference() && $field->linkedHlblockId) {
-                    $linkedIds[] = $field->linkedHlblockId;
-                }
-            }
-        }
-
-        return array_unique($linkedIds);
-    }
-
-    /**
-     * Find Highload Block used as directory for IBlock properties
-     */
-    public function findDirectoryHlblock(string $tableName): ?HighloadBlock
-    {
-        return $this->analyzeByTableName($tableName);
-    }
-
-    /**
      * Find Highload Block by table name suffix match.
      * Useful when Bitrix property has a different prefix (e.g. theme_a_colors vs theme_b_colors).
      */
@@ -221,19 +195,5 @@ class HighloadBlockAnalyzer
         }
 
         return null;
-    }
-
-    /**
-     * Check if Highload Block has complex relations
-     */
-    public function hasComplexRelations(HighloadBlock $hlblock): bool
-    {
-        foreach ($hlblock->fields as $field) {
-            if ($field->isHlblockReference()) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

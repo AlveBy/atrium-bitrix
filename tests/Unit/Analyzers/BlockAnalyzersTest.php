@@ -75,14 +75,6 @@ final class BlockAnalyzersTest extends SyntheticTestCase
         $this->assertSame([1 => $first], $analyzer->getAnalyzedIBlocks());
     }
 
-    public function test_an_iblock_is_found_by_code(): void
-    {
-        $analyzer = $this->iblocks();
-
-        $this->assertSame(1, $analyzer->analyzeByCode('demo_news')?->id);
-        $this->assertNull($analyzer->analyzeByCode('missing'));
-    }
-
     public function test_all_iblocks_or_those_of_one_type_are_analyzed(): void
     {
         $this->assertSame([1, 2], array_map(static fn ($i): int => $i->id, $this->iblocks()->analyzeAll()));
@@ -230,39 +222,6 @@ final class BlockAnalyzersTest extends SyntheticTestCase
         $this->assertSame(['iblocks_count' => 0, 'directories_count' => 0, 'iblocks' => []], $this->iblocks()->getSummary());
     }
 
-    public function test_complex_relations_and_linked_iblocks(): void
-    {
-        $analyzer = $this->iblocks();
-        $news = $analyzer->analyze(1);
-        $products = $analyzer->analyze(2);
-        $this->assertNotNull($news);
-        $this->assertNotNull($products);
-
-        $this->assertTrue($analyzer->hasComplexRelations($news));
-        $this->assertTrue($analyzer->hasComplexRelations($products));
-        // Both news and products link to products: one ID.
-        $this->assertSame([2], array_values($analyzer->getLinkedIBlockIds()));
-
-        $this->bitrix()->table('b_iblock_property')->where('ID', 2)->delete();
-        $plain = $this->iblocks()->analyze(1);
-        $this->assertNotNull($plain);
-        $this->assertFalse($this->iblocks()->hasComplexRelations($plain));
-    }
-
-    public function test_section_links_and_directories_count_as_complex_relations(): void
-    {
-        $this->bitrix()->table('b_iblock_property')->where('IBLOCK_ID', 2)->whereNotIn('ID', [18])->delete();
-        $sectionOnly = $this->iblocks()->analyze(2);
-        $this->assertNotNull($sectionOnly);
-        $this->assertTrue($this->iblocks()->hasComplexRelations($sectionOnly));
-
-        $this->bitrix()->table('b_iblock_property')->where('ID', 18)->update(['PROPERTY_TYPE' => 'S', 'USER_TYPE' => 'directory']);
-        $directoryOnly = $this->iblocks()->analyze(2);
-        $this->assertNotNull($directoryOnly);
-        $this->assertTrue($this->iblocks()->hasComplexRelations($directoryOnly));
-        $this->assertSame([], $this->iblocks()->getLinkedIBlockIds());
-    }
-
     public function test_a_highload_block_is_read_with_its_fields_and_enum_values(): void
     {
         $this->bitrix()->table('b_user_field')->where('ID', 5)->update(['USER_TYPE_ID' => 'enumeration']);
@@ -292,7 +251,6 @@ final class BlockAnalyzersTest extends SyntheticTestCase
         $this->bitrix()->table('b_hlblock_entity')->delete();
         $this->assertSame($block, $analyzer->analyze(1));
         $this->assertSame($block, $analyzer->analyzeByTableName('b_hlbd_brands'));
-        $this->assertSame($block, $analyzer->findDirectoryHlblock('b_hlbd_brands'));
         $this->assertSame([1 => $block], $analyzer->getAnalyzedHlblocks());
     }
 
@@ -301,7 +259,7 @@ final class BlockAnalyzersTest extends SyntheticTestCase
         $analyzer = $this->hlblocks();
 
         $this->assertSame(1, $analyzer->analyzeByTableName('b_hlbd_brands')?->id);
-        $this->assertNull($analyzer->findDirectoryHlblock('b_hlbd_colors'));
+        $this->assertNull($analyzer->analyzeByTableName('b_hlbd_colors'));
     }
 
     public function test_all_highload_blocks_and_their_summary(): void
@@ -318,9 +276,6 @@ final class BlockAnalyzersTest extends SyntheticTestCase
         $all = $analyzer->analyzeAll();
 
         $this->assertSame([1, 2], array_map(static fn ($b): int => $b->id, $all));
-        $this->assertSame([1], array_values($analyzer->getLinkedHlblockIds()));
-        $this->assertFalse($analyzer->hasComplexRelations($all[0]));
-        $this->assertTrue($analyzer->hasComplexRelations($all[1]));
 
         $summary = $analyzer->getSummary();
         $this->assertSame(2, $summary['hlblocks_count']);
@@ -337,7 +292,6 @@ final class BlockAnalyzersTest extends SyntheticTestCase
     public function test_an_empty_highload_summary(): void
     {
         $this->assertSame(['hlblocks_count' => 0, 'hlblocks' => []], $this->hlblocks()->getSummary());
-        $this->assertSame([], $this->hlblocks()->getLinkedHlblockIds());
     }
 
     public function test_a_similar_table_name_matches_by_everything_after_the_first_word(): void

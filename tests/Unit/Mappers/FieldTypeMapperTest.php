@@ -522,11 +522,10 @@ final class FieldTypeMapperTest extends TestCase
         $this->assertFalse($mapper->hlFieldToListColumn(self::field('file'))['sortable']);
     }
 
-    public function test_short_class_names_get_their_namespace(): void
+    public function test_a_short_field_class_name_gets_its_namespace(): void
     {
         $mapper = new FieldTypeMapper;
 
         $this->assertSame('Atrium\\Admin\\Fields\\TextField', $mapper->getFieldClassName('TextField'));
-        $this->assertSame('Atrium\\Admin\\Columns\\DateColumn', $mapper->getColumnClassName('DateColumn'));
     }
 }

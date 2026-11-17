@@ -65,20 +65,6 @@ class IBlockAnalyzer
     }
 
     /**
-     * Analyze IBlock by code
-     */
-    public function analyzeByCode(string $code): ?IBlock
-    {
-        $data = $this->connection->getIBlockByCode($code);
-
-        if (! $data) {
-            return null;
-        }
-
-        return $this->analyze((int) $data['ID']);
-    }
-
-    /**
      * Analyze all IBlocks
      */
     public function analyzeAll(?string $typeId = null): array
@@ -323,37 +309,5 @@ class IBlockAnalyzer
         }
 
         return $types;
-    }
-
-    /**
-     * Check if IBlock has complex relations
-     */
-    public function hasComplexRelations(IBlock $iblock): bool
-    {
-        foreach ($iblock->properties as $property) {
-            if ($property->isElementLink() || $property->isSectionLink() || $property->isDirectory()) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Get all IBlocks that are linked from properties
-     */
-    public function getLinkedIBlockIds(): array
-    {
-        $linkedIds = [];
-
-        foreach ($this->analyzedIBlocks as $iblock) {
-            foreach ($iblock->properties as $property) {
-                if ($property->isElementLink() && $property->linkIblockId) {
-                    $linkedIds[] = $property->linkIblockId;
-                }
-            }
-        }
-
-        return array_unique($linkedIds);
     }
 }
