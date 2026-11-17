@@ -50,9 +50,10 @@ class HighloadBlockField
 
         // Parse settings
         if (! empty($data['SETTINGS'])) {
-            $field->settings = is_string($data['SETTINGS'])
+            $settings = is_string($data['SETTINGS'])
                 ? @unserialize($data['SETTINGS'])
                 : $data['SETTINGS'];
+            $field->settings = is_array($settings) ? $settings : null;
 
             // For hlblock reference
             if ($field->userTypeId === 'hlblock' && isset($field->settings['HLBLOCK_ID'])) {

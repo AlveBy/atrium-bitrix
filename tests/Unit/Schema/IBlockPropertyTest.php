@@ -108,6 +108,14 @@ final class IBlockPropertyTest extends TestCase
         $this->assertSame('b_hlbd_sizes', $property->getDirectoryTableName());
     }
 
+    public function test_unreadable_settings_leave_the_property_without_any(): void
+    {
+        $property = $this->property(['USER_TYPE' => 'directory', 'USER_TYPE_SETTINGS' => 's:9:"broken']);
+
+        $this->assertNull($property->userTypeSettings);
+        $this->assertNull($property->getDirectoryTableName());
+    }
+
     public function test_a_table_name_in_the_settings_of_anything_but_a_directory_is_ignored(): void
     {
         $property = $this->property(['USER_TYPE' => 'HTML', 'USER_TYPE_SETTINGS' => ['TABLE_NAME' => 'b_hlbd_colors']]);

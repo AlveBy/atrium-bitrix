@@ -68,6 +68,14 @@ final class HighloadBlockTest extends TestCase
         $this->assertNull($unlinked->linkedHlblockId);
     }
 
+    public function test_unreadable_settings_leave_the_field_without_any(): void
+    {
+        $field = $this->field('hlblock', ['SETTINGS' => 's:9:"broken']);
+
+        $this->assertNull($field->settings);
+        $this->assertNull($field->linkedHlblockId);
+    }
+
     /**
      * @return array<string,array{0:string,1:string}>
      */

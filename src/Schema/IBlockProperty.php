@@ -92,9 +92,10 @@ class IBlockProperty
 
         // USER_TYPE_SETTINGS
         if (! empty($data['USER_TYPE_SETTINGS'])) {
-            $property->userTypeSettings = is_string($data['USER_TYPE_SETTINGS'])
+            $settings = is_string($data['USER_TYPE_SETTINGS'])
                 ? @unserialize($data['USER_TYPE_SETTINGS'])
                 : $data['USER_TYPE_SETTINGS'];
+            $property->userTypeSettings = is_array($settings) ? $settings : null;
 
             // For directories
             if ($property->userType === 'directory' && isset($property->userTypeSettings['TABLE_NAME'])) {
