@@ -725,7 +725,7 @@ class ModelGenerator
         }
 
         $table = $this->naming->toTableName($iblock->code);
-        $names = ProjectFields::applyListOverrides(array_values(array_unique(array_column($this->listLayout->columns(), 'name'))), $table);
+        $names = ProjectFields::applyListOverrides(array_unique(array_column($this->listLayout->columns(), 'name')), $table);
 
         $lines = ['return ['];
 
