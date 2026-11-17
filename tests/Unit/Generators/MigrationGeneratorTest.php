@@ -168,6 +168,18 @@ final class MigrationGeneratorTest extends TestCase
         $this->assertSame('2026_03_04_050609_0001_create_brands_table.php', $second);
     }
 
+    public function test_one_run_keeps_its_timestamp_while_the_clock_moves(): void
+    {
+        $generator = $this->generator();
+        $this->travelTo(new \DateTimeImmutable('2026-03-04 05:06:07'));
+        $first = $generator->generateForHlblock(self::brands())['main']['filename'];
+        $this->travelTo(new \DateTimeImmutable('2026-03-04 05:06:09'));
+        $second = $generator->generateForHlblock(self::brands())['main']['filename'];
+
+        $this->assertSame('2026_03_04_050607_0001_create_brands_table.php', $first);
+        $this->assertSame('2026_03_04_050607_0002_create_brands_table.php', $second);
+    }
+
     public function test_migrations_are_written_to_the_configured_folder(): void
     {
         config(['atrium-bitrix.migration_path' => '/tmp/somewhere']);

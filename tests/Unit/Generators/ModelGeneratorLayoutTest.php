@@ -92,4 +92,16 @@ final class ModelGeneratorLayoutTest extends SyntheticTestCase
         $this->assertStringContainsString('// Categories', $model);
         $this->assertStringContainsString("// SEO\n            TextField::make('extra')->tab('seo'),", $model);
     }
+
+    public function test_a_column_the_saved_list_names_twice_is_listed_once(): void
+    {
+        $this->bitrix()->table('b_user_option')->where('CATEGORY', 'list')->update(['VALUE' => serialize([
+            'columns' => 'NAME,DATE_ACTIVE_FROM,PROPERTY_11,DATE_ACTIVE_FROM,PROPERTY_23',
+        ])]);
+
+        $model = $this->products();
+
+        $this->assertSame(1, substr_count($model, "DateColumn::make('active_from')"));
+        $this->assertStringContainsString("TextColumn::make('name')->label(__('atrium::fields.standard.name'))->sortable()->searchable(),\n            DateColumn::make('active_from')->label(__('atrium::fields.standard.active_from'))->sortable(),\n            TextColumn::make('price')->label('Price')->sortable(),\n            TextColumn::make('brand')->label('Brand')->sortable(),\n        ];", $model);
+    }
 }
