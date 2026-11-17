@@ -42,7 +42,7 @@ final class BitrixSites
                 $domain = self::domain((string) $row->DOMAIN);
 
                 if ($domain !== '') {
-                    $domains[(string) $row->LID][] = $domain;
+                    $domains[$row->LID][] = $domain;
                 }
             }
         }
@@ -50,24 +50,24 @@ final class BitrixSites
         $sites = [];
 
         foreach ($db->table('b_lang')->orderBy('SORT')->orderBy('LID')->get() as $row) {
-            $lid = (string) $row->LID;
+            $lid = $row->LID;
             $language = strtolower((string) ($row->LANGUAGE_ID ?? ''));
             // The server name is the main domain in Bitrix: Atrium's first one.
-            $own = array_values(array_unique($domains[$lid] ?? []));
+            $own = array_unique($domains[$lid] ?? []);
             $main = self::domain((string) ($row->SERVER_NAME ?? ''));
             usort($own, static fn (string $a, string $b): int => (int) ($b === $main) <=> (int) ($a === $main));
 
             $sites[] = [
                 'lid' => $lid,
-                'dir' => (string) $row->DIR,
+                'dir' => $row->DIR,
                 'default' => $row->DEF === 'Y',
                 'attributes' => [
                     'code' => strtolower($lid),
-                    'name' => (string) $row->NAME,
+                    'name' => $row->NAME,
                     'folder' => Site::normalizeFolder($row->DIR),
                     'domains' => $own,
                     'active' => $row->ACTIVE === 'Y',
-                    'sort' => (int) $row->SORT,
+                    'sort' => $row->SORT,
                     'languages' => $language !== '' && Language::query()->where('code', $language)->exists() ? [$language] : null,
                 ],
             ];

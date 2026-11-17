@@ -49,7 +49,7 @@ final class BitrixConnectionTest extends SyntheticTestCase
     {
         $db = $this->connection();
 
-        $this->assertSame([1, 2], array_map(static fn (array $r): int => (int) $r['ID'], $db->getIBlockElements(2, 2)));
+        $this->assertSame([1, 2], array_map(static fn (array $r): int => (int) $r['ID'], $db->getIBlockElements(2, 2, 0)));
         $this->assertSame([3], array_map(static fn (array $r): int => (int) $r['ID'], $db->getIBlockElements(2, 2, 2)));
         $this->assertSame([], $db->getIBlockElements(2, 2, 3));
         $this->assertSame(3, $db->getIBlockElementCount(2));
@@ -107,7 +107,12 @@ final class BitrixConnectionTest extends SyntheticTestCase
         $db = $this->connection();
 
         // A single property that has no column in prop_s2.
+        $this->bitrix()->enableQueryLog();
         $this->assertSame([], $db->getElementLinkTargetIblocks(2, 14, false));
+        $this->assertSame([], array_filter(
+            array_column($this->bitrix()->getQueryLog(), 'query'),
+            static fn (string $sql): bool => str_contains($sql, 'PROPERTY_14'),
+        ), 'a column that is not there is not asked for');
 
         // Empty strings and NULLs are no link.
         $this->bitrix()->table('b_iblock_element_prop_s2')->update(['PROPERTY_18' => '']);
@@ -139,9 +144,9 @@ final class BitrixConnectionTest extends SyntheticTestCase
         $this->assertSame([], $db->getHighloadBlockFields(2));
         $this->assertSame(['Tiles', 'List'], array_column($db->getUserFieldEnumValues(2), 'VALUE'));
 
-        $this->assertSame(['Northwind'], array_column($db->getHighloadBlockData('b_hlbd_brands', 1), 'UF_NAME'));
+        $this->assertSame(['Northwind'], array_column($db->getHighloadBlockData('b_hlbd_brands', 1, 0), 'UF_NAME'));
         $this->assertSame(['Contoso'], array_column($db->getHighloadBlockData('b_hlbd_brands', 1, 1), 'UF_NAME'));
-        $this->assertSame([], $db->getHighloadBlockData('b_hlbd_none'));
+        $this->assertSame([], $db->getHighloadBlockData('b_hlbd_none', 100, 0));
         $this->assertSame(2, $db->getHighloadBlockDataCount('b_hlbd_brands'));
         $this->assertSame(0, $db->getHighloadBlockDataCount('b_hlbd_none'));
     }

@@ -51,11 +51,6 @@ final class BitrixListLayout
         private readonly int $pageSize,
     ) {}
 
-    public static function empty(): self
-    {
-        return new self([], null, 'asc', 0);
-    }
-
     /**
      * @param  array<int,string>  $propertyCodes  property ID => CODE
      */
@@ -71,15 +66,8 @@ final class BitrixListLayout
             ->where('NAME', 'tbl_iblock_list_'.md5($iblockType.'.'.$iblockId))
             ->value('VALUE');
 
-        if (! is_string($raw) || $raw === '') {
-            return self::empty();
-        }
-
-        $data = @unserialize($raw);
-
-        if (! is_array($data)) {
-            return self::empty();
-        }
+        $data = is_string($raw) ? @unserialize($raw) : null;
+        $data = is_array($data) ? $data : [];
 
         $columns = [];
 
@@ -98,7 +86,7 @@ final class BitrixListLayout
             }
 
             if (preg_match('/^PROPERTY_(\d+)$/', $code, $m)) {
-                $propertyCode = $propertyCodes[(int) $m[1]] ?? null;
+                $propertyCode = $propertyCodes[$m[1]] ?? null;
 
                 // The property may have been deleted from the iblock but not from the list settings.
                 if ($propertyCode !== null) {

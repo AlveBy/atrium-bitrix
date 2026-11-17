@@ -120,7 +120,7 @@ class BitrixConnection
     /**
      * Get IBlock elements with pagination
      */
-    public function getIBlockElements(int $iblockId, int $limit = 100, int $offset = 0): array
+    public function getIBlockElements(int $iblockId, int $limit, int $offset): array
     {
         return $this->connection
             ->table('b_iblock_element')
@@ -228,7 +228,7 @@ class BitrixConnection
         $targets = [];
 
         foreach ($rows as $row) {
-            $targets[(int) $row->IBLOCK_ID] = (int) $row->cnt;
+            $targets[$row->IBLOCK_ID] = $row->cnt;
         }
 
         return $targets;
@@ -240,7 +240,7 @@ class BitrixConnection
      *
      * @return Builder|null null if there is no storage
      */
-    protected function elementLinkValuesQuery(int $iblockId, int $propertyId, bool $multiple): ?Builder
+    private function elementLinkValuesQuery(int $iblockId, int $propertyId, bool $multiple): ?Builder
     {
         // Version 2: multiple values go to prop_mN, single ones are a column in prop_sN.
         $versionTwoTable = 'b_iblock_element_prop_'.($multiple ? 'm' : 's').$iblockId;
@@ -350,7 +350,7 @@ class BitrixConnection
     /**
      * Get Highload Block data
      */
-    public function getHighloadBlockData(string $tableName, int $limit = 100, int $offset = 0): array
+    public function getHighloadBlockData(string $tableName, int $limit, int $offset): array
     {
         if (! $this->tableExists($tableName)) {
             return [];

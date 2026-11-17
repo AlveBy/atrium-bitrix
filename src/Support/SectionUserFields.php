@@ -52,19 +52,19 @@ final class SectionUserFields
                 foreach ($connection->table('b_user_field_enum')->where('USER_FIELD_ID', $row->ID)->orderBy('SORT')->get() as $option) {
                     // Key by XML_ID (e.g. table/list/price) rather than the numeric ID:
                     // IDs change on a repeated migration, the codes stay.
-                    $enum[(int) $option->ID] = [
+                    $enum[$option->ID] = [
                         'code' => (string) ($option->XML_ID ?: $option->ID),
-                        'label' => (string) $option->VALUE,
+                        'label' => $option->VALUE,
                     ];
                 }
             }
 
             $fields[] = [
-                'name' => (string) $row->FIELD_NAME,
+                'name' => $row->FIELD_NAME,
                 'column' => $naming->ufFieldToColumnName((string) $row->FIELD_NAME),
-                'type' => (string) $row->USER_TYPE_ID,
+                'type' => $row->USER_TYPE_ID,
                 'multiple' => ($row->MULTIPLE ?? 'N') === 'Y',
-                'label' => (string) ($label ?: $row->FIELD_NAME),
+                'label' => $label ?: $row->FIELD_NAME,
                 'enum' => $enum,
             ];
         }
@@ -90,10 +90,6 @@ final class SectionUserFields
      */
     public function values(ConnectionInterface $connection, int $iblockId): array
     {
-        if ($this->fields === []) {
-            return [];
-        }
-
         $table = 'b_uts_iblock_'.$iblockId.'_section';
 
         try {
@@ -121,7 +117,7 @@ final class SectionUserFields
                 }
 
                 $values[$sectionId][$field['column']] = $field['enum'] !== []
-                    ? ($field['enum'][(int) $raw]['code'] ?? null)
+                    ? ($field['enum'][$raw]['code'] ?? null)
                     : $raw;
             }
         }

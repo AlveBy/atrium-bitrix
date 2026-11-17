@@ -401,11 +401,6 @@ class FieldTypeMapper
             return false;
         }
 
-        // Must have exactly 2 values
-        if (count($property->enumValues) !== 2) {
-            return false;
-        }
-
         $values = array_map(
             fn ($enum) => mb_strtoupper(trim($enum->value)),
             $property->enumValues

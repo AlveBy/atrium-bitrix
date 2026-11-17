@@ -86,7 +86,7 @@ class IBlockAnalyzer
     /**
      * Analyze IBlock properties
      */
-    protected function analyzeProperties(IBlock $iblock): void
+    private function analyzeProperties(IBlock $iblock): void
     {
         $properties = $this->connection->getIBlockProperties($iblock->id);
 
@@ -121,7 +121,7 @@ class IBlockAnalyzer
             }
 
             // Analyze directory (HL block) for directory type
-            if ($property->isDirectory() && $property->directoryTableName) {
+            if ($property->directoryTableName) {
                 $this->analyzeDirectoryProperty($property);
             }
 
@@ -146,7 +146,7 @@ class IBlockAnalyzer
      * relation, so those are left as they are: better a property without a
      * relation than half of the links pointing to the wrong place.
      */
-    protected function resolveOpenElementLink(IBlock $iblock, IBlockProperty $property): void
+    private function resolveOpenElementLink(IBlock $iblock, IBlockProperty $property): void
     {
         $configured = ProjectFields::elementLinkTargetFor($iblock->code, $property->code);
 
@@ -154,7 +154,7 @@ class IBlockAnalyzer
             $target = $this->connection->getIBlockByCode($configured);
 
             if ($target) {
-                $property->linkIblockId = (int) $target['ID'];
+                $property->linkIblockId = $target['ID'];
                 $property->linkIblockCode = $configured;
 
                 return;
@@ -171,7 +171,7 @@ class IBlockAnalyzer
             return;
         }
 
-        $targetId = (int) array_key_first($targets);
+        $targetId = array_key_first($targets);
         $target = $this->connection->getIBlock($targetId);
 
         if (! $target) {
@@ -185,7 +185,7 @@ class IBlockAnalyzer
     /**
      * Load enum values for list property
      */
-    protected function loadEnumValues(IBlockProperty $property): void
+    private function loadEnumValues(IBlockProperty $property): void
     {
         $enumValues = $this->connection->getPropertyEnumValues($property->id);
 
@@ -198,7 +198,7 @@ class IBlockAnalyzer
     /**
      * Analyze directory property (HL block reference)
      */
-    protected function analyzeDirectoryProperty(IBlockProperty $property): void
+    private function analyzeDirectoryProperty(IBlockProperty $property): void
     {
         $tableName = $property->directoryTableName;
 
@@ -224,7 +224,7 @@ class IBlockAnalyzer
     /**
      * Analyze IBlock sections
      */
-    protected function analyzeSections(IBlock $iblock): void
+    private function analyzeSections(IBlock $iblock): void
     {
         $sections = $this->connection->getIBlockSections($iblock->id);
 
@@ -297,7 +297,7 @@ class IBlockAnalyzer
     /**
      * Get property type summary for IBlock
      */
-    protected function getPropertyTypeSummary(IBlock $iblock): array
+    private function getPropertyTypeSummary(IBlock $iblock): array
     {
         $types = [];
 

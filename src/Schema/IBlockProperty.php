@@ -74,7 +74,7 @@ class IBlockProperty
             : self::generateCodeFromName($data['NAME'] ?? '', (int) $data['ID']);
         $property->name = $data['NAME'];
         $property->propertyType = $data['PROPERTY_TYPE'];
-        $property->listType = ! empty($data['LIST_TYPE']) ? (string) $data['LIST_TYPE'] : 'L';
+        $property->listType = ! empty($data['LIST_TYPE']) ? $data['LIST_TYPE'] : 'L';
         $property->userType = $data['USER_TYPE'] ?? null;
         $property->multiple = ($data['MULTIPLE'] ?? 'N') === 'Y';
         $property->isRequired = ($data['IS_REQUIRED'] ?? 'N') === 'Y';
@@ -239,12 +239,8 @@ class IBlockProperty
      * Generate a symbolic CODE from property NAME (transliterate Russian → Latin, UPPER_SNAKE_CASE).
      * Used as fallback when Bitrix property has no CODE set.
      */
-    protected static function generateCodeFromName(string $name, int $id): string
+    private static function generateCodeFromName(string $name, int $id): string
     {
-        if ($name === '') {
-            return 'PROPERTY_'.$id;
-        }
-
         $transliteration = [
             'а' => 'a', 'б' => 'b', 'в' => 'v', 'г' => 'g', 'д' => 'd',
             'е' => 'e', 'ё' => 'yo', 'ж' => 'zh', 'з' => 'z', 'и' => 'i',

@@ -16,6 +16,11 @@ namespace Atrium\Bitrix\Support;
  */
 class FtpClient
 {
+    /** Seconds for a whole transfer and for connecting. */
+    private const TIMEOUT = 30;
+
+    private const CONNECT_TIMEOUT = 10;
+
     protected string $host;
 
     protected string $user;
@@ -56,15 +61,14 @@ class FtpClient
         curl_setopt_array($ch, [
             CURLOPT_USERPWD => "{$this->user}:{$this->password}",
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => self::TIMEOUT,
+            CURLOPT_CONNECTTIMEOUT => self::CONNECT_TIMEOUT,
         ]);
 
         $result = curl_exec($ch);
-        $error = curl_errno($ch);
         curl_close($ch);
 
-        $content = ($error !== 0 || $result === false) ? null : $result;
+        $content = $result === false ? null : $result;
         $this->contentCache[$cacheKey] = $content;
 
         return $content;
@@ -83,7 +87,7 @@ class FtpClient
      */
     public function listDirectoryDetailed(string $path): array
     {
-        $cacheKey = rtrim($path, '/').'/';
+        $cacheKey = rtrim($path, '/');
 
         if (isset($this->listingCache[$cacheKey])) {
             return $this->listingCache[$cacheKey];
@@ -96,23 +100,15 @@ class FtpClient
         curl_setopt_array($ch, [
             CURLOPT_USERPWD => "{$this->user}:{$this->password}",
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_FTPLISTONLY => false,
+            CURLOPT_TIMEOUT => self::TIMEOUT,
+            CURLOPT_CONNECTTIMEOUT => self::CONNECT_TIMEOUT,
             CURLOPT_CUSTOMREQUEST => 'LIST',
         ]);
 
         $result = curl_exec($ch);
-        $error = curl_errno($ch);
         curl_close($ch);
 
-        if ($error !== 0 || $result === false || trim($result) === '') {
-            $this->listingCache[$cacheKey] = [];
-
-            return [];
-        }
-
-        $entries = $this->parseFtpList($result);
+        $entries = $result === false ? [] : $this->parseFtpList($result);
         $this->listingCache[$cacheKey] = $entries;
 
         return $entries;
@@ -144,19 +140,15 @@ class FtpClient
      *
      * @return array<int, array{name: string, type: string, size?: int}>
      */
-    protected function parseFtpList(string $rawListing): array
+    private function parseFtpList(string $rawListing): array
     {
         $entries = [];
-        $lines = explode("\n", trim($rawListing));
 
-        foreach ($lines as $line) {
+        foreach (explode("\n", $rawListing) as $line) {
             $line = trim($line);
-            if ($line === '' || str_starts_with($line, 'total')) {
-                continue;
-            }
 
             // Unix format: drwxr-xr-x  5 user group 4096 Jan 01 12:00 name
-            if (preg_match('/^([d\-l])([rwxsStT\-]{9})\s+\d+\s+\S+\s+\S+\s+(\d+)\s+\w+\s+\d+\s+[\d:]+\s+(.+)$/', $line, $m)) {
+            if (preg_match('/^([d\-l])([rwxsStT\-]{9})\s+\d+\s+\S+\s+\S+\s+(\d+)\s+\w+\s+\d+\s+[\d:]+\s+(.+)/', $line, $m)) {
                 $name = $m[4];
 
                 // Skip . and ..
@@ -186,9 +178,9 @@ class FtpClient
 
             // Windows/simple format: file or directory name
             // Fallback: if nothing could be parsed, treat it as a file
-            if (preg_match('/^(\S+)$/', $line, $m)) {
+            if (preg_match('/^\S+$/', $line)) {
                 $entries[] = [
-                    'name' => $m[1],
+                    'name' => $line,
                     'type' => 'file',
                 ];
             }

@@ -21,7 +21,7 @@ class NamingConvention
     public function __construct()
     {
         $this->mappings = config('atrium-bitrix.naming.mappings', []);
-        $this->prefixes = array_values(array_filter((array) config('atrium-bitrix.strip_prefixes', []), 'is_string'));
+        $this->prefixes = array_filter((array) config('atrium-bitrix.strip_prefixes', []), 'is_string');
     }
 
     /**
@@ -355,7 +355,7 @@ class NamingConvention
      * Bitrix uses UPPER_SNAKE_CASE for codes (e.g., "LINK_SERVICES")
      * This method correctly converts them to "link_services" instead of "l_i_n_k__s_e_r_v_i_c_e_s"
      */
-    protected function normalizeToSnakeCase(string $name): string
+    private function normalizeToSnakeCase(string $name): string
     {
         // If already UPPER_SNAKE_CASE (all uppercase with underscores), just lowercase
         if (preg_match('/^[A-Z0-9_]+$/', $name) && str_contains($name, '_')) {

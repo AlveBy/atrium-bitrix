@@ -43,16 +43,6 @@ final class BitrixFormLayout
         'edit2' => 'sections',
     ];
 
-    /**
-     * Service rows of the form that have no field here and should not get one:
-     * block separators and Bitrix's internal import code.
-     */
-    private const IGNORED = [
-        'IBLOCK_ELEMENT_PROP_VALUE',
-        'SEO_ADDITIONAL',
-        'XML_ID',
-    ];
-
     /** Bitrix base fields => our field names. */
     private const BASE_FIELDS = [
         'ACTIVE' => 'active',
@@ -104,7 +94,9 @@ final class BitrixFormLayout
         foreach (explode('--;--', $data['tabs']) as $tabChunk) {
             $items = explode('--,--', $tabChunk);
             $head = array_shift($items);
-            [$tabId, $tabLabel] = array_pad(explode('--#--', (string) $head), 2, '');
+            $headParts = explode('--#--', (string) $head);
+            $tabId = $headParts[0];
+            $tabLabel = $headParts[1] ?? '';
 
             $tabName = self::TAB_IDS[$tabId] ?? null;
 
@@ -115,7 +107,7 @@ final class BitrixFormLayout
             $tabs[] = ['name' => $tabName, 'label' => trim($tabLabel)];
 
             foreach ($items as $item) {
-                [$code] = array_pad(explode('--#--', (string) $item), 2, '');
+                $code = explode('--#--', (string) $item)[0];
                 $field = self::resolveField($code, $propertyCodes, $naming);
 
                 if ($field === null || isset($fieldTabs[$field])) {
@@ -137,15 +129,6 @@ final class BitrixFormLayout
      */
     private static function resolveField(string $code, array $propertyCodes, NamingConvention $naming): ?string
     {
-        if ($code === '' || in_array($code, self::IGNORED, true)) {
-            return null;
-        }
-
-        // The admin adds the SEO tab fields itself (HasAdminSeo); the model does not have them.
-        if (str_starts_with($code, 'IPROPERTY_TEMPLATES_') || $code === 'TAGS') {
-            return null;
-        }
-
         if (isset(self::BASE_FIELDS[$code])) {
             return self::BASE_FIELDS[$code];
         }
@@ -153,11 +136,14 @@ final class BitrixFormLayout
         if (preg_match('/^PROPERTY_(\d+)$/', $code, $m)) {
             // A saved layout may reference properties that were deleted from
             // the iblock. There is nothing to build a field from, so skip them.
-            $propertyCode = $propertyCodes[(int) $m[1]] ?? null;
+            $propertyCode = $propertyCodes[$m[1]] ?? null;
 
             return $propertyCode === null ? null : $naming->toColumnName($propertyCode);
         }
 
+        // Everything else has no field here: the SEO templates and tags (the
+        // admin adds the SEO tab itself, HasAdminSeo), block separators, the
+        // import code.
         return null;
     }
 

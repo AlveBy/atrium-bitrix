@@ -76,7 +76,7 @@ final class ProjectFields
     {
         $spec = self::forTable($table)[$column] ?? null;
 
-        return empty($spec['column']) ? null : (string) $spec['column'];
+        return empty($spec['column']) ? null : $spec['column'];
     }
 
     /**
@@ -92,13 +92,7 @@ final class ProjectFields
      */
     public static function elementLinkTargetFor(string $iblockCode, string $propertyCode): ?string
     {
-        $all = config('atrium-bitrix.element_link_targets', []);
-
-        if (! is_array($all) || ! isset($all[$iblockCode]) || ! is_array($all[$iblockCode])) {
-            return null;
-        }
-
-        $target = $all[$iblockCode][$propertyCode] ?? null;
+        $target = config('atrium-bitrix.element_link_targets', [])[$iblockCode][$propertyCode] ?? null;
 
         return is_string($target) && $target !== '' ? $target : null;
     }
@@ -149,19 +143,16 @@ final class ProjectFields
     {
         $hidden = self::hiddenListColumnsFor($table);
 
+        // Re-indexed: the position of the name is used below as an offset.
         $result = array_values(array_filter(
             $columns,
             static fn (string $column): bool => ! in_array($column, $hidden, true)
         ));
 
-        $extra = array_values(array_filter(
+        $extra = array_filter(
             self::extraListColumnsFor($table),
             static fn (string $column): bool => ! in_array($column, $result, true)
-        ));
-
-        if ($extra === []) {
-            return $result;
-        }
+        );
 
         // Right after the name: in a list of submissions what matters is who
         // left one, not the iblock's service fields.
@@ -189,9 +180,9 @@ final class ProjectFields
 
             $fields[] = [
                 'name' => $name,
-                'line' => (string) $spec['field'],
-                'tab' => (string) ($spec['tab'] ?? 'params'),
-                'after' => isset($spec['after']) ? (string) $spec['after'] : null,
+                'line' => $spec['field'],
+                'tab' => $spec['tab'] ?? 'params',
+                'after' => $spec['after'] ?? null,
             ];
         }
 

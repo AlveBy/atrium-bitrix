@@ -46,7 +46,7 @@ final class BitrixIblockMessages
             $text = trim((string) $text);
 
             if ($text !== '') {
-                $messages[(string) $key] = $text;
+                $messages[$key] = $text;
             }
         }
 

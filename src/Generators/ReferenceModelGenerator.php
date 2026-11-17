@@ -231,7 +231,7 @@ class ReferenceModelGenerator
 
         if (! empty($config['options'])) {
             $optionsStr = var_export($config['options'], true);
-            $optionsStr = str_replace(["\n", '  '], ['', ''], $optionsStr);
+            $optionsStr = str_replace(["\n", '  '], '', $optionsStr);
             $line .= "->options({$optionsStr})";
         }
 

@@ -95,7 +95,7 @@ class HighloadBlockAnalyzer
     /**
      * Analyze Highload Block fields
      */
-    protected function analyzeFields(HighloadBlock $hlblock): void
+    private function analyzeFields(HighloadBlock $hlblock): void
     {
         $fields = $this->connection->getHighloadBlockFields($hlblock->id);
 
@@ -114,7 +114,7 @@ class HighloadBlockAnalyzer
     /**
      * Load enum values for enumeration field
      */
-    protected function loadEnumValues(HighloadBlockField $field): void
+    private function loadEnumValues(HighloadBlockField $field): void
     {
         $enumValues = $this->connection->getUserFieldEnumValues($field->id);
 
@@ -160,7 +160,7 @@ class HighloadBlockAnalyzer
     /**
      * Get field type summary for Highload Block
      */
-    protected function getFieldTypeSummary(HighloadBlock $hlblock): array
+    private function getFieldTypeSummary(HighloadBlock $hlblock): array
     {
         $types = [];
 
