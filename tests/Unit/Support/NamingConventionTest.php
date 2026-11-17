@@ -150,6 +150,12 @@ final class NamingConventionTest extends TestCase
             'Chinese' => ['价格', ''],
             'emoji' => ['🪑', ''],
             'already snake' => ['ALREADY_SNAKE', 'already_snake'],
+            'Cyrillic capitals' => ['ЦЕНА', 'tsena'],
+            'Cyrillic capitals with a soft sign' => ['ЩУКА ЖЕНЯ', 'schuka_zhenya'],
+            'Cyrillic title case words' => ['Цена Тура', 'tsena_tura'],
+            'Latin acronym beside Cyrillic' => ['SMS Услуга', 'sms_usluga'],
+            'Latin camel case' => ['showOnMain', 'show_on_main'],
+            'Latin capitals' => ['SERVICES', 'services'],
         ];
     }
 

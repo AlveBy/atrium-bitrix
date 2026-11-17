@@ -137,17 +137,17 @@ class NamingConvention
      */
     public function generateCodeFromName(string $name): string
     {
-        $transliterated = $this->transliterate($name);
+        // Cyrillic capitals would come out as "Ts" + "ENA" and break into letters
+        $lowered = preg_replace_callback(
+            '/\p{Cyrillic}+/u',
+            static fn (array $run): string => mb_strtolower($run[0]),
+            $name,
+        );
 
-        // Replace non-alphanumeric with underscores
-        $clean = preg_replace('/[^a-zA-Z0-9]+/', '_', $transliterated);
-        $clean = trim($clean, '_');
+        // Words are what is left between everything that is not a Latin letter or a digit
+        $words = preg_split('/[^a-zA-Z0-9]+/', $this->transliterate($lowered), -1, PREG_SPLIT_NO_EMPTY);
 
-        if ($clean === '') {
-            return '';
-        }
-
-        $result = $this->normalizeToSnakeCase($clean);
+        $result = implode('_', array_map($this->normalizeToSnakeCase(...), $words));
 
         // Ensure doesn't start with a digit
         if (preg_match('/^\d/', $result)) {
