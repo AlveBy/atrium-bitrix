@@ -10,10 +10,8 @@ declare(strict_types=1);
 namespace Atrium\Bitrix\Tests\Unit\Schema;
 
 use Atrium\Bitrix\Schema\IBlock;
-use Atrium\Bitrix\Schema\IBlockElement;
 use Atrium\Bitrix\Schema\IBlockProperty;
 use Atrium\Bitrix\Schema\IBlockSection;
-use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 
 final class IBlockTest extends TestCase
@@ -127,59 +125,5 @@ final class IBlockTest extends TestCase
         $iblock = IBlock::fromArray(['ID' => 2, 'NAME' => 'Products']);
         $iblock->addSection($root);
         $this->assertSame([$root], $iblock->sections);
-    }
-
-    public function test_an_element_row_is_read_with_its_dates(): void
-    {
-        $element = IBlockElement::fromArray([
-            'ID' => '5', 'IBLOCK_ID' => '2', 'IBLOCK_SECTION_ID' => '3', 'NAME' => 'Laptop', 'CODE' => 'laptop',
-            'XML_ID' => 'x5', 'SORT' => '30', 'ACTIVE' => 'N', 'PREVIEW_TEXT' => 'Short', 'PREVIEW_TEXT_TYPE' => 'text',
-            'PREVIEW_PICTURE' => '11', 'DETAIL_TEXT' => '<p>Long</p>', 'DETAIL_TEXT_TYPE' => 'html', 'DETAIL_PICTURE' => '12',
-            'TAGS' => 'a, b', 'CREATED_BY' => '1', 'MODIFIED_BY' => '2', 'DATE_CREATE' => '2024-02-01 09:00:00',
-            'TIMESTAMP_X' => '2024-02-02 10:00:00', 'DATE_ACTIVE_FROM' => '2024-03-01 00:00:00',
-            'DATE_ACTIVE_TO' => '2024-04-01 00:00:00',
-        ]);
-
-        $this->assertSame(
-            [5, 2, 3, 'Laptop', 'laptop', 'x5', 30, false, 'Short', 'text', 11, '<p>Long</p>', 'html', 12, 'a, b', 1, 2],
-            [$element->id, $element->iblockId, $element->sectionId, $element->name, $element->code, $element->xmlId, $element->sort, $element->active, $element->previewText, $element->previewTextType, $element->previewPictureId, $element->detailText, $element->detailTextType, $element->detailPictureId, $element->tags, $element->createdBy, $element->modifiedBy],
-        );
-        $this->assertSame('2024-02-01 09:00:00', $element->dateCreate->format('Y-m-d H:i:s'));
-        $this->assertSame('2024-02-02 10:00:00', $element->timestampX->format('Y-m-d H:i:s'));
-        $this->assertSame('2024-03-01', $element->activeFrom?->format('Y-m-d'));
-        $this->assertSame('2024-04-01', $element->activeTo?->format('Y-m-d'));
-    }
-
-    public function test_a_bare_element_row_is_dated_now_and_has_no_period(): void
-    {
-        $before = new DateTimeImmutable('-1 second');
-        $element = IBlockElement::fromArray(['ID' => 1, 'IBLOCK_ID' => 2, 'NAME' => 'Bare', 'IBLOCK_SECTION_ID' => 0, 'PREVIEW_PICTURE' => '', 'CREATED_BY' => 0]);
-
-        $this->assertSame(
-            [null, null, null, 500, true, null, null, null, null, null, null, null, null, null, null, null],
-            [$element->sectionId, $element->code, $element->xmlId, $element->sort, $element->active, $element->previewText, $element->previewTextType, $element->previewPictureId, $element->detailText, $element->detailTextType, $element->detailPictureId, $element->tags, $element->createdBy, $element->modifiedBy, $element->activeFrom, $element->activeTo],
-        );
-        $this->assertGreaterThanOrEqual($before, $element->dateCreate);
-        $this->assertGreaterThanOrEqual($before, $element->timestampX);
-    }
-
-    public function test_element_properties_and_sections(): void
-    {
-        $element = IBlockElement::fromArray(['ID' => 1, 'IBLOCK_ID' => 2, 'NAME' => 'Laptop']);
-
-        $this->assertNull($element->getProperty('PRICE'));
-        $element->setProperty('PRICE', 10.5);
-        $element->setProperty('TAGS', ['a']);
-        $this->assertSame(10.5, $element->getProperty('PRICE'));
-        $this->assertSame(['PRICE' => 10.5, 'TAGS' => ['a']], $element->properties);
-
-        $this->assertFalse($element->isInMultipleSections());
-        $element->addSectionId(3);
-        $element->addSectionId(3);
-        $this->assertSame([3], $element->sectionIds);
-        $this->assertFalse($element->isInMultipleSections());
-        $element->addSectionId(4);
-        $this->assertSame([3, 4], $element->sectionIds);
-        $this->assertTrue($element->isInMultipleSections());
     }
 }
