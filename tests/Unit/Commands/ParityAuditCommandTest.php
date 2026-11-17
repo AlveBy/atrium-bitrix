@@ -10,10 +10,9 @@ declare(strict_types=1);
 namespace Atrium\Bitrix\Tests\Unit\Commands;
 
 use Atrium\Admin\Fields\Field;
-use Atrium\Admin\Fields\FieldContext;
-use Atrium\Admin\Fields\TextField;
 use Atrium\Admin\Models\Site;
 use Atrium\Bitrix\Commands\ParityAuditCommand;
+use Atrium\Bitrix\Mappers\FieldTypeMapper;
 use Atrium\Bitrix\Tests\SyntheticTestCase;
 use Illuminate\Console\OutputStyle;
 use Illuminate\Database\Schema\Blueprint;
@@ -167,7 +166,7 @@ final class ParityAuditCommandTest extends SyntheticTestCase
 
         $this->assertSame([
             'PREVIEW_TEXT' => ['NO_COLUMN'],
-            'SOURCE' => ['MULTIPLE_LOST', 'REQUIRED_MISMATCH', 'NOT_FILLABLE'],
+            'SOURCE' => ['TYPE_MISMATCH', 'MULTIPLE_LOST', 'REQUIRED_MISMATCH', 'NOT_FILLABLE'],
             'LINK_GOODS' => ['OK'],
             'RATING' => ['NO_COLUMN'],
             'AUTHOR' => ['NO_FIELD'],
@@ -178,17 +177,19 @@ final class ParityAuditCommandTest extends SyntheticTestCase
         $this->assertSame('No column `rating` in `news` and no admin field', $news['detail']);
         $this->assertSame('Data is stored but there is no admin field to edit it', $this->find($report['properties'], ['code' => 'AUTHOR'])['detail']);
         $this->assertSame('Base IBlock field has no column', $this->find($report['properties'], ['code' => 'PREVIEW_TEXT'])['detail']);
-        // The mapper answers with short class names ("RepeatableField"), which
-        // never exist, so no type is ever expected and TYPE_MISMATCH never fires.
+        // Many strings are a repeatable list in Bitrix; the model renders one text input.
         $source = $this->find($report['properties'], ['code' => 'SOURCE', 'status' => 'MULTIPLE_LOST']);
-        $this->assertSame(['expected_type' => '', 'actual_type' => 'text', 'sort' => 100], $source['meta']);
+        $this->assertSame(['expected_type' => 'repeatable', 'actual_type' => 'text', 'sort' => 100], $source['meta']);
+        $this->assertSame('Bitrix implies repeatable, we render text', $this->find($report['properties'], ['code' => 'SOURCE', 'status' => 'TYPE_MISMATCH'])['detail']);
         $this->assertSame('Property is MULTIPLE in Bitrix but `text` holds one value', $this->find($report['properties'], ['code' => 'SOURCE', 'status' => 'MULTIPLE_LOST'])['detail']);
         $this->assertSame('`source` is not in $fillable — the value is discarded on save', $this->find($report['properties'], ['code' => 'SOURCE', 'status' => 'NOT_FILLABLE'])['detail']);
         $this->assertSame('Property is disabled in Bitrix — absence here is expected', $this->find($report['properties'], ['code' => 'OLD'])['detail']);
 
         $colour = $this->find($report['properties'], ['code' => 'COLOR', 'status' => 'ENUM_MISMATCH']);
         $this->assertSame('Missing option(s): red, 5 (Bitrix has 4, we have 2)', $colour['detail']);
-        $this->assertSame(['OK'], $this->statuses($report, 'demo_products')['ORDERABLE'], 'a list without options has nothing to compare');
+        // The checkbox lost its only option in Bitrix: that is a select now, and the enums have nothing to compare.
+        $this->assertSame(['TYPE_MISMATCH'], $this->statuses($report, 'demo_products')['ORDERABLE']);
+        $this->assertSame('Bitrix implies select, we render checkbox', $this->find($report['properties'], ['code' => 'ORDERABLE'])['detail']);
 
         $this->assertSame(
             [['iblock' => 'demo_products', 'model' => 'Product', 'field' => 'article', 'type' => 'text', 'label' => 'Article number']],
@@ -205,7 +206,7 @@ final class ParityAuditCommandTest extends SyntheticTestCase
         $this->artisan('atrium:bitrix:parity')
             ->expectsOutputToContain('| demo_news     | SOURCE       | S           | Y | Y | source       | MULTIPLE_LOST     | Property is MULTIPLE in Bitrix but `text` holds one value       |')
             ->expectsOutputToContain('| demo_products | COLOR        | L           |   |   | color        | ENUM_MISMATCH     | Missing option(s): red, 5 (Bitrix has 4, we have 2)             |')
-            ->expectsOutputToContain('IBlocks: 2   Properties checked: 21   Problems: 7   Extra fields: 1')
+            ->expectsOutputToContain('IBlocks: 2   Properties checked: 22   Problems: 9   Extra fields: 1')
             ->expectsOutputToContain('| demo_news     | 1  | News    | news     | 2      | 1    | SHORT by 1 |')
             ->expectsOutput('demo_news → news: SHORT by 1')
             ->assertFailed();
@@ -361,12 +362,9 @@ final class ParityAuditCommandTest extends SyntheticTestCase
 
     public function test_the_widget_type_of_a_field_class(): void
     {
-        $this->assertSame('', $this->invoke('fieldTypeFromClass', ''));
-        $this->assertSame('', $this->invoke('fieldTypeFromClass', 'Atrium\\Admin\\Fields\\NoSuchField'));
-        $this->assertSame('text', $this->invoke('fieldTypeFromClass', TextField::class));
-        // Neither can be asked for its type: the name is used instead.
-        $this->assertSame('context', $this->invoke('fieldTypeFromClass', FieldContext::class));
-        $this->assertSame('', $this->invoke('fieldTypeFromClass', Field::class));
+        $this->assertSame('text', $this->invoke('fieldTypeFromClass', 'TextField'));
+        $this->assertSame('repeatable', $this->invoke('fieldTypeFromClass', 'RepeatableField'));
+        $this->assertSame('belongsToMany', $this->invoke('fieldTypeFromClass', 'BelongsToManyField'));
     }
 
     /**
@@ -557,6 +555,10 @@ final class ParityAuditCommandTest extends SyntheticTestCase
         $command->setInput(new ArrayInput([], $command->getDefinition()));
         $command->setOutput(new OutputStyle(new ArrayInput([]), new BufferedOutput));
 
-        return (fn () => $this->{$method}(...$args))->call($command);
+        return (function () use ($method, $args) {
+            $this->mapper ??= new FieldTypeMapper;
+
+            return $this->{$method}(...$args);
+        })->call($command);
     }
 }

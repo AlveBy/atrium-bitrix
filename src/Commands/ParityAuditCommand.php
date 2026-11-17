@@ -11,6 +11,7 @@ namespace Atrium\Bitrix\Commands;
 
 use Atrium\Bitrix\Mappers\FieldTypeMapper;
 use Atrium\Bitrix\Schema\IBlockProperty;
+use Atrium\Bitrix\Schema\IBlockPropertyEnum;
 use Atrium\Bitrix\Support\BitrixConnection;
 use Atrium\Bitrix\Support\BitrixFormLayout;
 use Atrium\Bitrix\Support\BitrixListLayout;
@@ -527,6 +528,7 @@ class ParityAuditCommand extends Command
         // --- IBlock properties ----------------------------------------------
         foreach ($this->bitrix->getIBlockProperties($iblockId) as $raw) {
             $property = IBlockProperty::fromArray($raw);
+            $this->loadEnumValues($property);
             $active = ($raw['ACTIVE'] ?? 'Y') === 'Y';
 
             $column = $this->naming->toColumnName($property->code);
@@ -549,7 +551,7 @@ class ParityAuditCommand extends Command
             }
 
             $expected = $this->mapper->toAdminField($property);
-            $expectedType = $this->fieldTypeFromClass($expected['class'] ?? '');
+            $expectedType = $this->fieldTypeFromClass($expected['class']);
 
             $meta = [
                 'expected_type' => $expectedType,
@@ -685,22 +687,25 @@ class ParityAuditCommand extends Command
         return $out;
     }
 
-    protected function fieldTypeFromClass(string $class): string
+    /**
+     * The options of a list decide its widget: one option shown as checkboxes
+     * is a plain checkbox, not a select.
+     */
+    protected function loadEnumValues(IBlockProperty $property): void
     {
-        if ($class === '') {
-            return '';
+        foreach ($this->bitrix->getPropertyEnumValues($property->id) as $enum) {
+            $property->addEnumValue(IBlockPropertyEnum::fromArray($enum));
         }
+    }
 
-        if (! class_exists($class)) {
-            return '';
-        }
+    /**
+     * The widget type a short field class name (as the mapper gives it) stands for.
+     */
+    protected function fieldTypeFromClass(string $shortName): string
+    {
+        $class = $this->mapper->getFieldClassName($shortName);
 
-        try {
-            return (new $class('probe'))->getType();
-        } catch (\Throwable) {
-            // Fall back to deriving the type string from the class name.
-            return lcfirst(Str::replaceLast('Field', '', class_basename($class)));
-        }
+        return (new $class)->getType();
     }
 
     protected function typeIsMultiple(string $type): bool
