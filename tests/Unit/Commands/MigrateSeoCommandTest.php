@@ -251,6 +251,37 @@ final class MigrateSeoCommandTest extends SyntheticTestCase
         $this->assertSame('kept', $this->seo('products', 1)['title'] ?? null);
     }
 
+    public function test_the_counts_of_one_run_do_not_carry_over_to_the_next(): void
+    {
+        unlink($this->workDir.'/models/ProductSection.php');
+        DB::table('products')->where('bitrix_id', 2)->delete();
+        $this->bitrix()->table('b_iblock_element')->where('ID', 1)->update(['TAGS' => str_repeat('t', 501)]);
+        $this->iproperty([
+            ['ELEMENT_META_TITLE', 'E', 1, 'kept'],
+            ['ELEMENT_META_TITLE', 'E', 2, 'row gone'],
+            ['SECTION_META_TITLE', 'S', 1, 'no model'],
+        ]);
+        $this->bitrix()->table('b_iblock_iproperty')->insert([
+            'ID' => 9, 'IBLOCK_ID' => 7, 'CODE' => 'ELEMENT_META_TITLE', 'ENTITY_TYPE' => 'E', 'ENTITY_ID' => 1, 'TEMPLATE' => 'unknown iblock',
+        ]);
+
+        $this->artisan('atrium:bitrix:migrate:seo', ['--force' => true])
+            ->expectsOutput('Written: 1')
+            ->expectsOutput('Skipped (no model for the table): 2 - product_sections, iblock 7 without code')
+            ->expectsOutput('Skipped (element was not migrated, no row with this bitrix_id): 1')
+            ->expectsOutput('Truncated to the column length: 1 values')
+            ->assertSuccessful();
+
+        $this->iproperty([['SECTION_META_TITLE', 'S', 1, 'no model']]);
+
+        $this->artisan('atrium:bitrix:migrate:seo', ['--force' => true])
+            ->expectsOutput('Written: 0')
+            ->expectsOutput('Skipped (no model for the table): 1 - product_sections')
+            ->doesntExpectOutputToContain('element was not migrated')
+            ->doesntExpectOutputToContain('Truncated')
+            ->assertSuccessful();
+    }
+
     public function test_an_iblock_without_a_code_cannot_be_matched_to_a_model(): void
     {
         $this->bitrix()->table('b_iblock')->where('ID', 2)->update(['CODE' => '']);

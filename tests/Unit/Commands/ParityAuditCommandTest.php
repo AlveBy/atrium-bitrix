@@ -26,8 +26,6 @@ use Symfony\Component\Console\Output\BufferedOutput;
 /**
  * parity: the Bitrix structure against the generated models, field by field,
  * plus forms, list columns, widgets, sites and data volume.
- *
- * Every test runs the command once: its rows outlive a run.
  */
 final class ParityAuditCommandTest extends SyntheticTestCase
 {
@@ -197,6 +195,19 @@ final class ParityAuditCommandTest extends SyntheticTestCase
         );
         $this->assertSame('SHORT by 1', $this->find($report['iblocks'], ['iblock' => 'demo_news'])['status']);
         $this->assertSame('OK', $this->find($report['iblocks'], ['iblock' => 'demo_products'])['status']);
+    }
+
+    public function test_a_second_audit_reports_what_the_first_did(): void
+    {
+        $this->migrate();
+        $this->drift();
+
+        $first = $this->report();
+        $second = $this->report();
+
+        $this->assertNotSame([], $first['properties']);
+        $this->assertNotSame([], $first['extra_fields']);
+        $this->assertSame($first, $second);
     }
 
     public function test_drift_shows_in_the_table_report(): void

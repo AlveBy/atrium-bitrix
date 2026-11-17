@@ -62,6 +62,8 @@ class SyncDataCommand extends MigrateDataCommand
             return self::FAILURE;
         }
 
+        $this->report = [];
+        $this->jsonColumnsCache = [];
         $this->audit = (bool) $this->option('audit');
         $this->dryRun = $this->audit || (bool) $this->option('dry-run');
         $this->chunkSize = (int) $this->option('chunk');

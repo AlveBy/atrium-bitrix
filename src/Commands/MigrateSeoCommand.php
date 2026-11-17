@@ -86,6 +86,8 @@ class MigrateSeoCommand extends AbstractBitrixCommand
 
         $dryRun = (bool) $this->option('dry-run');
 
+        $this->written = $this->skippedNoModel = $this->skippedNoRow = $this->truncated = 0;
+        $this->missingTables = [];
         $this->tableToModel = $this->buildTableToModelMap();
         $this->line(sprintf('Models with SEO support: %d', count($this->tableToModel)));
 

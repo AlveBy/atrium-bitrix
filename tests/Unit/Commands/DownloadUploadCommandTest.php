@@ -233,6 +233,29 @@ final class DownloadUploadCommandTest extends SyntheticTestCase
         $this->assertSame(['real.txt'], array_values(array_diff(scandir($this->local('')) ?: [], ['.', '..'])));
     }
 
+    public function test_the_counts_of_one_run_do_not_carry_over_to_the_next(): void
+    {
+        $this->remote('upload/real.txt', 'real');
+        $this->remote('upload/kept.txt', 'new');
+        $this->remote('upload/.listing', implode("\r\n", [
+            '-rw-r--r--   1 ftp ftp        4 Jan 01 12:00 real.txt',
+            '-rw-r--r--   1 ftp ftp        3 Jan 01 12:00 kept.txt',
+            '-rw-r--r--   1 ftp ftp        9 Jan 01 12:00 vanished.txt',
+        ]));
+        mkdir($this->local(''), 0777, true);
+        file_put_contents($this->local('kept.txt'), 'old');
+
+        $this->artisan('atrium:bitrix:download:upload', $this->ftpOptions(['--skip-existing' => true]))
+            ->expectsOutput('Done! Downloaded: 1, Skipped: 1, Failed: 1')
+            ->assertSuccessful();
+
+        $this->remote('upload/.listing', '-rw-r--r--   1 ftp ftp        4 Jan 01 12:00 real.txt');
+
+        $this->artisan('atrium:bitrix:download:upload', $this->ftpOptions())
+            ->expectsOutput('Done! Downloaded: 1, Skipped: 0, Failed: 0')
+            ->assertSuccessful();
+    }
+
     public function test_an_empty_upload_directory_downloads_nothing(): void
     {
         $this->artisan('atrium:bitrix:download:upload', $this->ftpOptions())

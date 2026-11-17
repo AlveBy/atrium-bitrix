@@ -22,9 +22,6 @@ use Symfony\Component\Console\Output\BufferedOutput;
 /**
  * sync: the catch-up transfer. New and changed rows come over, local edits
  * and protected columns stay, rows gone from Bitrix are reported or pruned.
- *
- * Every test runs the command once after the first transfer: its summary
- * outlives a run (a known bug).
  */
 final class SyncDataCommandTest extends SyntheticTestCase
 {
@@ -56,6 +53,25 @@ final class SyncDataCommandTest extends SyntheticTestCase
             ->assertSuccessful();
 
         $this->assertEquals($before, DB::table('products')->orderBy('id')->get()->toArray());
+    }
+
+    public function test_the_summary_of_one_run_does_not_carry_over_to_the_next(): void
+    {
+        $this->migrate();
+
+        $this->artisan('atrium:bitrix:sync', ['--force' => true])
+            ->expectsTable(self::HEADERS, [
+                ['news', 0, 0, 2, 0],
+                ['product_sections', 0, 0, 3, 0],
+                ['products', 0, 0, 3, 0],
+            ])
+            ->assertSuccessful();
+
+        $this->artisan('atrium:bitrix:sync', ['--force' => true, '--iblock' => ['1']])
+            ->expectsTable(self::HEADERS, [
+                ['news', 0, 0, 2, 0],
+            ])
+            ->assertSuccessful();
     }
 
     public function test_new_and_changed_rows_come_over(): void

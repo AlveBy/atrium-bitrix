@@ -57,6 +57,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
             return self::FAILURE;
         }
 
+        $this->jsonColumnsCache = [];
         $this->chunkSize = (int) $this->option('chunk');
         $this->skipFiles = (bool) $this->option('skip-files');
 

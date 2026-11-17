@@ -39,6 +39,8 @@ class DownloadUploadCommand extends Command
 
     public function handle(): int
     {
+        $this->downloaded = $this->skipped = $this->failed = 0;
+
         $host = $this->option('host') ?: config('atrium-bitrix.ftp.host');
         $user = $this->option('user') ?: config('atrium-bitrix.ftp.user');
         $password = $this->option('password') ?: config('atrium-bitrix.ftp.password');

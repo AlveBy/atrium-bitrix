@@ -34,6 +34,8 @@ class VerifyDataCommand extends AbstractBitrixCommand
 
     public function handle(): int
     {
+        $this->totalChecks = $this->passedChecks = $this->failedChecks = 0;
+
         $this->info('Bitrix Data Verification');
         $this->info('========================');
         $this->newLine();

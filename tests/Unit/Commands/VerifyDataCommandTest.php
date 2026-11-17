@@ -24,8 +24,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * verify: counts, link tables, sampled records and files, compared between
  * Bitrix and what migrate:data wrote.
- *
- * Every test runs the command once: its counters outlive a run (a known bug).
  */
 final class VerifyDataCommandTest extends SyntheticTestCase
 {
@@ -64,6 +62,19 @@ final class VerifyDataCommandTest extends SyntheticTestCase
             ->doesntExpectOutputToContain('  products:')
             ->expectsOutput('Checks: 2 | OK: 0 | Failed: 2')
             ->assertFailed();
+    }
+
+    public function test_the_checks_of_one_run_do_not_carry_over_to_the_next(): void
+    {
+        $this->artisan('atrium:bitrix:verify', ['--iblock' => [2], '--hlblock' => [1], '--sample' => 0])
+            ->expectsOutput('Checks: 2 | OK: 0 | Failed: 2')
+            ->assertFailed();
+
+        $this->migrate();
+
+        $this->artisan('atrium:bitrix:verify', ['--iblock' => [2], '--hlblock' => [1], '--sample' => 0])
+            ->expectsOutput('Checks: 4 | OK: 4 | Failed: 0')
+            ->assertSuccessful();
     }
 
     public function test_a_clean_migration_passes_every_check(): void

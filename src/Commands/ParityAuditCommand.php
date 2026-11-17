@@ -101,6 +101,7 @@ class ParityAuditCommand extends Command
 
     public function handle(): int
     {
+        $this->rows = $this->iblockRows = $this->extraRows = $this->siteRows = [];
         $this->bitrix = new BitrixConnection($this->option('connection'));
         $this->naming = new NamingConvention;
         $this->mapper = new FieldTypeMapper;

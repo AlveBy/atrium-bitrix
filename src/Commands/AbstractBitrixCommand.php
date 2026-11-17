@@ -14,6 +14,8 @@ use Atrium\Bitrix\Analyzers\IBlockAnalyzer;
 use Atrium\Bitrix\Support\BitrixConnection;
 use Atrium\Bitrix\Support\NamingConvention;
 use Illuminate\Console\Command;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
 
 abstract class AbstractBitrixCommand extends Command
 {
@@ -24,6 +26,18 @@ abstract class AbstractBitrixCommand extends Command
     protected ?HighloadBlockAnalyzer $hlblockAnalyzer = null;
 
     protected ?NamingConvention $naming = null;
+
+    /**
+     * A command that runs again in the same process starts from nothing: the
+     * connection, the analyzers and what they read are those of this run.
+     */
+    protected function initialize(InputInterface $input, OutputInterface $output): void
+    {
+        $this->bitrixConnection = null;
+        $this->iblockAnalyzer = null;
+        $this->hlblockAnalyzer = null;
+        $this->naming = null;
+    }
 
     /**
      * The IDs given in a repeatable option (--iblock=2 --iblock=5), as
