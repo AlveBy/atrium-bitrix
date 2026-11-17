@@ -621,9 +621,6 @@ class ParityAuditCommand extends Command
             if (in_array($name, $matchedFieldNames, true)) {
                 continue;
             }
-            if (in_array($name, array_values(self::BASE_FIELDS), true)) {
-                continue;
-            }
             // Fields the admin panel itself adds (SEO tab, section binding).
             if (str_starts_with($name, 'seo_') || str_starts_with($name, 'meta_') || in_array($name, ['section_id', 'canonical_url'], true)) {
                 continue;

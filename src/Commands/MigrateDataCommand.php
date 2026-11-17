@@ -694,11 +694,6 @@ class MigrateDataCommand extends AbstractBitrixCommand
             return null;
         }
 
-        // Handle empty strings for JSON columns - return null
-        if ($value === '') {
-            return null;
-        }
-
         return $value;
     }
 
@@ -732,9 +727,6 @@ class MigrateDataCommand extends AbstractBitrixCommand
                 }
             } else {
                 $values = $propertyValues[$property->code] ?? [];
-                if (! is_array($values)) {
-                    $values = [$values];
-                }
             }
 
             if (empty($values)) {

@@ -128,14 +128,7 @@ PHP;
                 continue;
             }
 
-            $columnDef = $this->typeMapper->toMigrationColumn($property);
-
-            // Skip pivot type
-            if ($columnDef['type'] === 'pivot') {
-                continue;
-            }
-
-            $columns[] = $this->buildColumnDefinition($columnName, $columnDef, $property);
+            $columns[] = $this->buildColumnDefinition($columnName, $this->typeMapper->toMigrationColumn($property), $property);
         }
 
         return $columns;
