@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace Atrium\Bitrix\Commands;
 
+use Atrium\Admin\Cache\RecordCache;
 use Atrium\Admin\Models\MediaCollection;
 use Atrium\Admin\Models\MediaItem;
 
@@ -37,6 +38,12 @@ class MigrateMediaLibraryCommand extends AbstractBitrixCommand
     private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
 
     public function handle(): int
+    {
+        // Rows go in past Eloquent: the record cache is dropped once, at the end.
+        return app(RecordCache::class)->bulk(fn (): int => $this->import(), everything: true);
+    }
+
+    private function import(): int
     {
         if (! $this->verifyConnection()) {
             return self::FAILURE;

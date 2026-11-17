@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace Atrium\Bitrix\Commands;
 
+use Atrium\Admin\Cache\RecordCache;
 use Atrium\Admin\Traits\HasAdminSeo;
 use Atrium\Bitrix\Support\GeneratedPaths;
 use Illuminate\Database\Eloquent\Model;
@@ -79,6 +80,12 @@ class MigrateSeoCommand extends AbstractBitrixCommand
     private array $missingTables = [];
 
     public function handle(): int
+    {
+        // Rows go in past Eloquent: the record cache is dropped once, at the end.
+        return app(RecordCache::class)->bulk(fn (): int => $this->import(), everything: true);
+    }
+
+    private function import(): int
     {
         if (! $this->verifyConnection()) {
             return self::FAILURE;

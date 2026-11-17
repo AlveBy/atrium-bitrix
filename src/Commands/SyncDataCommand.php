@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace Atrium\Bitrix\Commands;
 
+use Atrium\Admin\Cache\RecordCache;
 use Atrium\Bitrix\Schema\IBlock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -53,6 +54,12 @@ class SyncDataCommand extends MigrateDataCommand
     private array $report = [];
 
     public function handle(): int
+    {
+        // Rows go in past Eloquent: the record cache is dropped once, at the end.
+        return app(RecordCache::class)->bulk(fn (): int => $this->import(), everything: true);
+    }
+
+    private function import(): int
     {
         $this->info('Catch-up transfer from Bitrix');
         $this->info('==============================');

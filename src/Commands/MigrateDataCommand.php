@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace Atrium\Bitrix\Commands;
 
+use Atrium\Admin\Cache\RecordCache;
 use Atrium\Bitrix\Schema\IBlock;
 use Atrium\Bitrix\Schema\IBlockProperty;
 use Atrium\Bitrix\Support\SectionUserFields;
@@ -48,6 +49,12 @@ class MigrateDataCommand extends AbstractBitrixCommand
     ];
 
     public function handle(): int
+    {
+        // Rows go in past Eloquent: the record cache is dropped once, at the end.
+        return app(RecordCache::class)->bulk(fn (): int => $this->import(), everything: true);
+    }
+
+    private function import(): int
     {
         $this->info('Bitrix Data Migration');
         $this->info('=====================');

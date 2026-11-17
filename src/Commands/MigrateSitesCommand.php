@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace Atrium\Bitrix\Commands;
 
+use Atrium\Admin\Cache\RecordCache;
 use Atrium\Admin\Models\Site;
 use Atrium\Bitrix\Support\BitrixSites;
 use Illuminate\Validation\ValidationException;
@@ -27,6 +28,12 @@ class MigrateSitesCommand extends AbstractBitrixCommand
     protected $description = 'Move Bitrix sites (b_lang) with their folders and domains to Atrium';
 
     public function handle(): int
+    {
+        // Rows go in past Eloquent: the record cache is dropped once, at the end.
+        return app(RecordCache::class)->bulk(fn (): int => $this->import(), everything: true);
+    }
+
+    private function import(): int
     {
         if (! $this->verifyConnection()) {
             return self::FAILURE;
