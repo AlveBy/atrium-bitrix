@@ -20,6 +20,7 @@ use Atrium\Bitrix\Support\ProjectFields;
 use Atrium\Bitrix\Support\SectionUserFields;
 use Atrium\Bitrix\Tests\Fixtures\SyntheticBitrix;
 use Atrium\Bitrix\Tests\SyntheticTestCase;
+use Illuminate\Database\Schema\Blueprint;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -75,10 +76,10 @@ final class LayoutsTest extends SyntheticTestCase
     public function test_service_rows_unknown_tabs_and_deleted_properties_are_skipped(): void
     {
         $this->saveForm(implode('--;--', [
-            'edit1--#--Main--,--XML_ID--#--Ext--,--IBLOCK_ELEMENT_PROP_VALUE--#----,--SEO_ADDITIONAL--#--x--,--TAGS--#--Tags--,--NAME--#--Name--,--PROPERTY_999--#--Gone--,--PROPERTY_11--#--Price--,--NAME--#--Again--,----#--Blank--,--WEIRD--#--?',
+            'edit1--#--Main--,--XML_ID--#--Ext--,--IBLOCK_ELEMENT_PROP_VALUE--#----,--SEO_ADDITIONAL--#--x--,--TAGS--#--Tags--,--NAME--#--Name--,--PROPERTY_999--#--Gone--,--XPROPERTY_10--#--Not one--,--PROPERTY_10X--#--Not one--,--PROPERTY_11--#--Price--,--NAME--#--Again--,----#--Blank--,--WEIRD--#--?',
             'cedit1--#--Custom tab--,--SORT--#--Sort',
             'edit5--#--   --,--PREVIEW_TEXT--#--Text',
-            'edit6--#--Details--,--DETAIL_TEXT',
+            'edit6--#--  Details  --,--DETAIL_TEXT',
         ]));
 
         $form = $this->form();
@@ -89,6 +90,7 @@ final class LayoutsTest extends SyntheticTestCase
         $this->assertSame(1, $form->positionOf('price'));
         $this->assertSame(2, $form->positionOf('detail_text'));
         $this->assertSame('params', $form->tabFor('name'), 'the first place of a field wins');
+        $this->assertNull($form->tabFor('article'), 'a code has to be PROPERTY_ and a number, nothing around it');
         $this->assertNull($form->tabFor('sort'), 'tabs of our own are not Bitrix\'s');
         $this->assertNull($form->tabFor('preview_text'), 'a tab without a caption is dropped');
     }
@@ -149,6 +151,7 @@ final class LayoutsTest extends SyntheticTestCase
             'sort by something else' => [['columns' => 'NAME', 'by' => 'Custom_Field', 'order' => 'sideways'], ['name'], 'custom_field', 'asc', 0],
             'blanks and deleted properties dropped' => [['columns' => ' NAME , ,PROPERTY_999,UNKNOWN,PROPERTY_10', 'by' => '  '], ['name', 'article'], null, 'asc', 0],
             'no columns' => [['by' => 'id'], [], 'id', 'asc', 0],
+            'property codes are PROPERTY_ and a number, nothing around it' => [['columns' => 'XPROPERTY_10,PROPERTY_10X,PROPERTY_11'], ['price'], null, 'asc', 0],
         ];
     }
 
@@ -244,6 +247,26 @@ final class LayoutsTest extends SyntheticTestCase
 
         $this->assertTrue($view['multiple']);
         $this->assertSame(['code' => '2', 'label' => 'List'], $view['enum'][2]);
+    }
+
+    public function test_a_section_row_counts_by_its_value_id_whatever_the_driver_returns(): void
+    {
+        $schema = $this->bitrix()->getSchemaBuilder();
+        $schema->drop('b_uts_iblock_2_section');
+        $schema->create('b_uts_iblock_2_section', function (Blueprint $t): void {
+            $t->text('VALUE_ID')->nullable();
+            $t->text('UF_NOTE')->nullable();
+            $t->integer('UF_VIEW')->nullable();
+        });
+        $this->bitrix()->table('b_uts_iblock_2_section')->insert([
+            ['VALUE_ID' => '0', 'UF_NOTE' => 'zero', 'UF_VIEW' => null],
+            ['VALUE_ID' => null, 'UF_NOTE' => 'none', 'UF_VIEW' => null],
+            ['VALUE_ID' => '7', 'UF_NOTE' => 'seven', 'UF_VIEW' => null],
+        ]);
+
+        $fields = SectionUserFields::load($this->bitrix(), 2, new NamingConvention);
+
+        $this->assertSame([7 => ['note' => 'seven']], $fields->values($this->bitrix(), 2));
     }
 
     public function test_no_section_fields_means_no_values(): void
@@ -355,6 +378,8 @@ final class LayoutsTest extends SyntheticTestCase
             'extra already there not repeated' => [['id', 'name', 'phone'], [], ['phone', 'email'], ['id', 'name', 'email', 'phone']],
             'hidden and added back' => [['id', 'name', 'active'], ['active'], ['active'], ['id', 'name', 'active']],
             'everything hidden' => [['id'], ['id'], [], []],
+            'extra after the name when columns before it are hidden' => [['id', 'name', 'active'], ['id'], ['phone'], ['name', 'phone', 'active']],
+            'hidden from the start or the middle, the rest in a row' => [['id', 'name', 'active', 'sort'], ['id', 'active'], [], ['name', 'sort']],
         ];
     }
 

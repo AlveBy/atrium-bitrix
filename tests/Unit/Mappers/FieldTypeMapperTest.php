@@ -200,6 +200,7 @@ final class FieldTypeMapperTest extends TestCase
         yield 'pdf' => [['FILE_TYPE' => 'PDF'], '.pdf'];
         yield 'word documents' => [['FILE_TYPE' => 'doc, docx'], '.doc,.docx,.pdf'];
         yield 'images win over documents' => [['FILE_TYPE' => 'pdf, png'], 'image/*'];
+        yield 'images win over documents in capitals' => [['FILE_TYPE' => 'PDF, PNG'], 'image/*'];
         yield 'pdf wins over word' => [['FILE_TYPE' => 'docx, pdf'], '.pdf'];
         yield 'anything else is an image' => [['FILE_TYPE' => 'zip, rar'], 'image/*'];
     }

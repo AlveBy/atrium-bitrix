@@ -41,6 +41,7 @@ final class NamingConventionTest extends TestCase
             'upper case word' => ['SERVICES', 'services', 'Service', 'service_sections', 'ServiceSection', 'services'],
             'camel case' => ['tourPrices', 'tour_prices', 'TourPrice', 'tour_price_sections', 'TourPriceSection', 'tour-prices'],
             'starts with a digit' => ['2024_events', 'iblock_2024_events', 'Iblock2024Event', 'iblock_2024_event_sections', 'Iblock2024EventSection', '2024-events'],
+            'digit inside' => ['item2', 'item2s', 'Item2', 'item2_sections', 'Item2Section', 'item2s'],
         ];
     }
 
@@ -104,6 +105,15 @@ final class NamingConventionTest extends TestCase
         $this->assertSame('x', $naming->stripPrefixes('DEMO_x'));
     }
 
+    public function test_a_prefix_is_matched_whatever_the_case_of_either_side(): void
+    {
+        $naming = $this->naming(['Demo_']);
+
+        $this->assertSame('news', $naming->stripPrefixes('demo_news'));
+        $this->assertSame('news', $naming->stripPrefixes('DEMO_news'));
+        $this->assertSame('demo_news', $this->naming(['other_'])->stripPrefixes('demo_news'));
+    }
+
     public function test_only_the_first_matching_theme_prefix_is_cut(): void
     {
         $naming = $this->naming(['a_', 'b_']);
@@ -126,6 +136,12 @@ final class NamingConventionTest extends TestCase
             'digits and letters' => ['3D', '3d'],
             'camel case' => ['showOnMain', 'show_on_main'],
             'lower case' => ['price', 'price'],
+            'digit after an underscore' => ['ITEM_2', 'item_2'],
+            'digit after letters' => ['PRICE2', 'price2'],
+            'capitals after lower case' => ['fooBAR', 'foo_b_a_r'],
+            'capitals before lower case' => ['BARfoo', 'b_a_rfoo'],
+            'underscore and lower case' => ['LINK_servicesX', 'l_i_n_k_services_x'],
+            'lower camel case with an underscore' => ['foo_barBaz', 'foo_bar_baz'],
         ];
     }
 
@@ -156,6 +172,7 @@ final class NamingConventionTest extends TestCase
             'Latin acronym beside Cyrillic' => ['SMS Услуга', 'sms_usluga'],
             'Latin camel case' => ['showOnMain', 'show_on_main'],
             'Latin capitals' => ['SERVICES', 'services'],
+            'digit between words' => ['Size 2 cm', 'size_2_cm'],
         ];
     }
 
@@ -200,6 +217,7 @@ final class NamingConventionTest extends TestCase
             'prefix only at the start' => ['x_b_hlbd_colors', 'x_b_hlbd_colors'],
             'camel case' => ['b_hlbd_colorReference', 'color_reference'],
             'starts with a digit' => ['b_hlbd_2colors', 'hlblock_2colors'],
+            'digit inside' => ['b_hlbd_color2', 'color2'],
         ];
     }
 
@@ -220,6 +238,7 @@ final class NamingConventionTest extends TestCase
             'hlblock_ prefix in capitals' => ['HLBLOCK_Sizes', 'Sizes'],
             'upper snake' => ['COLOR_REFERENCE', 'ColorReference'],
             'starts with a digit' => ['hl_2colors', 'Hlblock2colors'],
+            'digit inside' => ['hl_color2', 'Color2'],
         ];
     }
 
@@ -259,6 +278,7 @@ final class NamingConventionTest extends TestCase
             'Cyrillic words' => ['Под заказ', 'POD_ZAKAZ'],
             'starts with a digit' => ['3 days', 'VALUE_3_DAYS'],
             'symbols dropped' => ['50% off!', 'VALUE_50_OFF'],
+            'digit inside' => ['Option 2', 'OPTION2'],
             'empty' => ['', ''],
         ];
     }

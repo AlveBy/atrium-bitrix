@@ -12,13 +12,15 @@ declare(strict_types=1);
  * connection at a time, just the commands cURL sends to fetch a file or list
  * a directory. Prints the address it listens on, then serves until killed.
  *
- *   php fake-ftp-server.php <root> <user> <password>
+ *   php fake-ftp-server.php <root> <user> <password> [<command log>]
  *
  * A file called .listing in a directory is sent as that directory's LIST
- * output, so a test can feed the client any listing format it likes.
+ * output, so a test can feed the client any listing format it likes. With a
+ * command log, every command line received is appended to that file.
  */
 
 [, $root, $user, $password] = $argv;
+$log = $argv[4] ?? null;
 
 $server = stream_socket_server('tcp://127.0.0.1:0', $errno, $error);
 
@@ -34,7 +36,7 @@ while (true) {
     $control = @stream_socket_accept($server, -1);
 
     if ($control !== false) {
-        serve($control, rtrim($root, '/'), $user, $password);
+        serve($control, rtrim($root, '/'), $user, $password, $log);
         fclose($control);
     }
 }
@@ -42,7 +44,7 @@ while (true) {
 /**
  * @param  resource  $control
  */
-function serve($control, string $root, string $user, string $password): void
+function serve($control, string $root, string $user, string $password, ?string $log): void
 {
     $say = static function (string $line) use ($control): void {
         fwrite($control, $line."\r\n");
@@ -57,6 +59,11 @@ function serve($control, string $root, string $user, string $password): void
 
     while (($line = fgets($control)) !== false) {
         $line = rtrim($line, "\r\n");
+
+        if ($log !== null && ! str_starts_with($line, 'PASS ')) {
+            file_put_contents($log, $line.PHP_EOL, FILE_APPEND);
+        }
+
         [$command, $argument] = array_pad(explode(' ', $line, 2), 2, '');
         $command = strtoupper($command);
 

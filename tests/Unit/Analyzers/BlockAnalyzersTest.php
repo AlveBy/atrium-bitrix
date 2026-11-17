@@ -70,7 +70,9 @@ final class BlockAnalyzersTest extends SyntheticTestCase
 
         $first = $analyzer->analyze(1);
         $this->bitrix()->table('b_iblock')->where('ID', 1)->update(['NAME' => 'Changed']);
+        $this->bitrix()->enableQueryLog();
         $this->assertSame($first, $analyzer->analyze(1));
+        $this->assertSame([], $this->bitrix()->getQueryLog(), 'an iblock read once is not asked for again');
         $this->assertSame('News', $analyzer->analyze(1)?->name);
         $this->assertSame([1 => $first], $analyzer->getAnalyzedIBlocks());
     }
@@ -193,6 +195,45 @@ final class BlockAnalyzersTest extends SyntheticTestCase
 
         $this->assertSame('b_hlbd_brands', $brand?->directoryHlblock?->tableName);
         $this->assertSame(['other_hlbd_brands'], array_keys($analyzer->getLinkedDirectories()));
+    }
+
+    public function test_only_link_properties_look_up_the_iblock_they_name(): void
+    {
+        $this->bitrix()->table('b_iblock_property')->where('ID', 10)->update(['LINK_IBLOCK_ID' => 1]);
+
+        $iblock = $this->iblocks()->analyze(2);
+
+        $this->assertSame(1, $iblock?->getPropertyByCode('ARTICLE')?->linkIblockId);
+        $this->assertNull($iblock?->getPropertyByCode('ARTICLE')?->linkIblockCode);
+        $this->assertSame('demo_products', $iblock?->getPropertyByCode('CATEGORY')?->linkIblockCode);
+    }
+
+    public function test_a_directory_without_a_table_has_no_block(): void
+    {
+        $this->bitrix()->table('b_iblock_property')->where('ID', 23)->update([
+            'USER_TYPE_SETTINGS' => serialize(['size' => 1]),
+        ]);
+
+        $analyzer = $this->iblocks();
+        $brand = $analyzer->analyze(2)?->getPropertyByCode('BRAND');
+
+        $this->assertNotNull($brand);
+        $this->assertNull($brand->directoryTableName);
+        $this->assertNull($brand->directoryHlblock);
+        $this->assertSame([], $analyzer->getLinkedDirectories());
+    }
+
+    public function test_a_section_whose_parent_is_gone_stays_a_section_of_its_own(): void
+    {
+        $this->bitrix()->table('b_iblock_section')->insert([
+            'ID' => 4, 'IBLOCK_ID' => 2, 'IBLOCK_SECTION_ID' => 99, 'NAME' => 'Orphans', 'CODE' => 'orphans', 'SORT' => 300, 'LEFT_MARGIN' => 7, 'RIGHT_MARGIN' => 8,
+        ]);
+
+        $iblock = $this->iblocks()->analyze(2);
+
+        $this->assertSame(['Hardware', 'Laptops', 'Software', 'Orphans'], array_map(static fn ($s): string => $s->name, $iblock?->sections ?? []));
+        $this->assertSame([], $iblock?->sections[3]->children);
+        $this->assertSame(99, $iblock?->sections[3]->parentId);
     }
 
     public function test_a_directory_with_an_unknown_table_has_no_block(): void

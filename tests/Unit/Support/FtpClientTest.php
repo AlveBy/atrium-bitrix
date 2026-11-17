@@ -185,4 +185,66 @@ final class FtpClientTest extends TestCase
             ['name' => 'plain-name.txt', 'type' => 'file'],
         ], $this->client()->listDirectoryDetailed('/upload/mixed'));
     }
+
+    public function test_a_file_of_the_default_root_is_asked_for_without_a_leading_slash(): void
+    {
+        $server = self::$server;
+        $server?->commands();
+        $client = new FtpClient((string) $server?->address, 'bitrix', 'secret');
+
+        $this->assertSame('<?php // home', $client->getContents('/'.$this->site.'/index.php'));
+        $this->assertSame(['CWD '.$this->site, 'RETR index.php'], $this->asked(['CWD', 'RETR']));
+
+        $this->assertSame('JPEG', $client->getContents($this->site.'/upload/iblock/a1b/photo.jpg'));
+        $this->assertSame(['CWD '.$this->site, 'CWD upload', 'CWD iblock', 'CWD a1b', 'RETR photo.jpg'], $this->asked(['CWD', 'RETR']));
+    }
+
+    public function test_a_directory_of_the_default_root_is_listed_without_a_leading_slash(): void
+    {
+        $client = new FtpClient((string) self::$server?->address, 'bitrix', 'secret');
+        self::$server?->commands();
+
+        $client->listDirectoryDetailed('/'.$this->site.'/upload');
+        $this->assertSame(['CWD '.$this->site, 'CWD upload', 'LIST'], $this->asked(['CWD', 'LIST']));
+
+        $client->listDirectoryDetailed($this->site.'/upload/empty');
+        $this->assertSame(['CWD '.$this->site, 'CWD upload', 'CWD empty', 'LIST'], $this->asked(['CWD', 'LIST']));
+
+        $this->assertNotEmpty($client->listDirectoryDetailed('/'));
+        $this->assertSame(['LIST'], $this->asked(['CWD', 'LIST']), 'the root is the login directory, no CWD to /');
+    }
+
+    public function test_a_listing_is_read_line_by_line_whatever_the_spaces_around_them(): void
+    {
+        $this->put('upload/spaced/.listing', implode("\n", [
+            'total 8',
+            '   plain.txt   ',
+            'drwxr-xr-x   2 ftp ftp     4096 Jan 01 12:00 folder   ',
+            "  -rw-r--r--   1 ftp ftp       12 Jan 01 12:00 indented.txt\r",
+            'junk drwxr-xr-x   2 ftp ftp     4096 Jan 01 12:00 prefixed',
+            'two words',
+            'totals.txt',
+        ]));
+
+        $this->assertSame([
+            ['name' => 'plain.txt', 'type' => 'file'],
+            ['name' => 'folder', 'type' => 'dir'],
+            ['name' => 'indented.txt', 'type' => 'file', 'size' => 12],
+            ['name' => 'totals.txt', 'type' => 'file'],
+        ], $this->client()->listDirectoryDetailed('/upload/spaced'));
+    }
+
+    /**
+     * What the server was asked, of the given commands only.
+     *
+     * @param  array<int,string>  $only
+     * @return array<int,string>
+     */
+    private function asked(array $only): array
+    {
+        return array_values(array_filter(
+            self::$server?->commands() ?? [],
+            static fn (string $line): bool => in_array(explode(' ', $line)[0], $only, true),
+        ));
+    }
 }
