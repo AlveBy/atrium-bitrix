@@ -225,9 +225,6 @@ PHP);
     }
 
     /**
-     * Add use statements
-     */
-    /**
      * Section form fields. Project columns (absent in Bitrix) are inserted
      * by their `after` key so regeneration neither drops nor shifts them.
      */
@@ -295,6 +292,9 @@ PHP);
         return implode("\n", $lines);
     }
 
+    /**
+     * Add use statements
+     */
     private function addUseStatements(PhpNamespace $namespace): void
     {
         $namespace->addUse('Illuminate\\Database\\Eloquent\\Model');

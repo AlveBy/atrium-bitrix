@@ -339,7 +339,7 @@ class ModelGenerator
         if (! empty($iblock->sections)) {
             $sectionModelName = $this->naming->toSectionModelName($iblock->code);
 
-            $method = $class->addMethod('section')
+            $class->addMethod('section')
                 ->setReturnType('Illuminate\\Database\\Eloquent\\Relations\\BelongsTo')
                 ->setBody("return \$this->belongsTo({$sectionModelName}::class);");
         }
@@ -540,7 +540,7 @@ class ModelGenerator
 
         // Canonical tab order, so that added tabs do not end up at the tail.
         $order = array_flip($defaults);
-        usort($tabs, static fn (array $a, array $b): int => ($order[$a['name']] ?? 99) <=> ($order[$b['name']] ?? 99));
+        usort($tabs, static fn (array $a, array $b): int => $order[$a['name']] <=> $order[$b['name']]);
 
         $lines = ['return ['];
 
@@ -608,10 +608,6 @@ class ModelGenerator
             $fieldConfig = $this->fieldMapper->toAdminField($property);
             $fieldLine = $this->generateFieldLine($fieldConfig);
 
-            if ($fieldLine === '') {
-                continue;
-            }
-
             // The layout key is the property code: the Bitrix form stores the
             // field as PROPERTY_{ID}, while our widget name may differ
             // (BelongsToManyField moves to the relation name: link_goods -> linkGoods).
@@ -625,8 +621,8 @@ class ModelGenerator
             $tabOrder = array_flip(array_column($this->layout->tabs(), 'name'));
 
             usort($entries, function (array $a, array $b) use ($tabOrder): int {
-                return [$tabOrder[$a['tab']] ?? PHP_INT_MAX, $this->layout->positionOf($a['key'])]
-                    <=> [$tabOrder[$b['tab']] ?? PHP_INT_MAX, $this->layout->positionOf($b['key'])];
+                return [$tabOrder[$a['tab']], $this->layout->positionOf($a['key'])]
+                    <=> [$tabOrder[$b['tab']], $this->layout->positionOf($b['key'])];
             });
         }
 
@@ -691,7 +687,7 @@ class ModelGenerator
         }
 
         if ($this->layout !== null && ! $this->layout->hasTab($defaultTab)) {
-            return $this->layout->tabs()[0]['name'] ?? $defaultTab;
+            return $this->layout->tabs()[0]['name'];
         }
 
         return $defaultTab;
@@ -728,13 +724,8 @@ class ModelGenerator
             $properties[$this->naming->toColumnName($property->code)] = $property;
         }
 
-        $layout = [];
-        foreach ($this->listLayout->columns() as $column) {
-            $layout[$column['name']] = $column;
-        }
-
         $table = $this->naming->toTableName($iblock->code);
-        $names = ProjectFields::applyListOverrides(array_keys($layout), $table);
+        $names = ProjectFields::applyListOverrides(array_values(array_unique(array_column($this->listLayout->columns(), 'name'))), $table);
 
         $lines = ['return ['];
 
@@ -743,12 +734,7 @@ class ModelGenerator
 
             $lines[] = $projectColumn !== null
                 ? '    '.$projectColumn.','
-                : $this->columnLine(
-                    $name,
-                    $properties[$name] ?? null,
-                    $nameLabel,
-                    $layout[$name]['label'] ?? null
-                );
+                : $this->columnLine($name, $properties[$name] ?? null, $nameLabel);
         }
 
         $lines[] = '];';
@@ -763,12 +749,8 @@ class ModelGenerator
      * property; for base fields (active, updated_at...) Bitrix stores no
      * label, so the decision is made by name.
      */
-    private function columnLine(
-        string $name,
-        ?IBlockProperty $property,
-        string $nameLabel,
-        ?string $layoutLabel = null
-    ): string {
+    private function columnLine(string $name, ?IBlockProperty $property, string $nameLabel): string
+    {
         if ($property !== null) {
             $config = $this->fieldMapper->toListColumn($property);
             $class = $config['class'];
@@ -784,7 +766,6 @@ class ModelGenerator
             $standard = ['id', 'active', 'active_from', 'active_to', 'code', 'sort', 'created_at', 'updated_at', 'preview_picture', 'detail_picture', 'preview_text'];
             $label = match (true) {
                 $name === 'name' => $nameLabel,
-                $layoutLabel !== null => Labels::literal($layoutLabel),
                 in_array($name, $standard, true) => Labels::standard($name),
                 default => Labels::literal($name),
             };
@@ -827,7 +808,7 @@ class ModelGenerator
             $line .= "->model({$config['model']}::class)";
         }
 
-        if ($class === 'CheckboxField' && ! empty($config['checkedValue'])) {
+        if (! empty($config['checkedValue'])) {
             $line .= "->checkedValue('{$config['checkedValue']}')";
         }
 
@@ -899,7 +880,7 @@ class ModelGenerator
                 continue;
             }
 
-            $label = trim((string) $property->name);
+            $label = trim($property->name);
 
             if ($label !== '') {
                 return $label;

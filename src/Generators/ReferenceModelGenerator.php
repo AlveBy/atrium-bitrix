@@ -202,10 +202,7 @@ class ReferenceModelGenerator
 
         foreach ($hlblock->fields as $field) {
             $fieldConfig = $this->fieldMapper->hlFieldToAdminField($field);
-            $fieldLine = $this->generateFieldLine($fieldConfig);
-            if ($fieldLine) {
-                $lines[] = "    {$fieldLine},";
-            }
+            $lines[] = '    '.$this->generateFieldLine($fieldConfig).',';
         }
 
         $lines[] = '];';
@@ -284,14 +281,14 @@ class ReferenceModelGenerator
         // Try to find a name-like field
         $nameField = null;
         foreach ($hlblock->fields as $field) {
-            $columnName = strtolower($this->naming->ufFieldToColumnName($field->fieldName));
+            $columnName = $this->naming->ufFieldToColumnName($field->fieldName);
             if (in_array($columnName, ['name', 'title', 'value', 'xml_id'])) {
                 $nameField = $columnName;
                 break;
             }
         }
 
-        if (! $nameField && ! empty($hlblock->fields)) {
+        if (! $nameField) {
             // Use first string field
             foreach ($hlblock->fields as $field) {
                 if ($field->isString()) {
