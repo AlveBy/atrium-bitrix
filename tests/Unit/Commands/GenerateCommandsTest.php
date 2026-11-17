@@ -1,0 +1,265 @@
+<?php
+
+/*
+ * This file is part of Atrium (https://github.com/AlveBy/atrium).
+ * Copyright (c) 2026 AlveBy. Licensed under the MIT License, see LICENSE.
+ */
+
+declare(strict_types=1);
+
+namespace Atrium\Bitrix\Tests\Unit\Commands;
+
+use Atrium\Bitrix\Tests\SyntheticTestCase;
+
+/**
+ * generate:migrations and generate:models: what they pick, what they write,
+ * and what they leave alone.
+ */
+final class GenerateCommandsTest extends SyntheticTestCase
+{
+    /**
+     * @return list<string>
+     */
+    private function migrations(): array
+    {
+        return array_map(
+            static fn (string $file): string => (string) preg_replace('/^\d{4}_\d{2}_\d{2}_\d{6}_\d{4}_/', '', $file),
+            $this->generatedFiles('migrations'),
+        );
+    }
+
+    public function test_a_dry_run_of_migrations_lists_them_and_writes_nothing(): void
+    {
+        $this->artisan('atrium:bitrix:generate:migrations', ['--dry-run' => true, '--no-interaction' => true])
+            ->expectsOutput('Generating linked Highload Block migrations (referenced by IBlocks)...')
+            ->expectsOutput('Highload Block: Brands')
+            ->expectsOutputToContain('_0001_create_brands_table.php')
+            ->expectsOutput('IBlock: News (demo_news)')
+            ->expectsOutputToContain('  Would create [elements]: ')
+            ->expectsOutput('IBlock: Products (demo_products)')
+            ->expectsOutputToContain('  Would create [sections]: ')
+            ->expectsOutput('Link tables')
+            ->expectsOutputToContain('  Would create [demo_news.pivot_link_goods]: ')
+            ->expectsOutput('  Skipping Brands (already generated as linked directory)')
+            ->doesntExpectOutputToContain('Schema::create')
+            ->doesntExpectOutputToContain('Created [')
+            ->doesntExpectOutput('Run "php artisan migrate" to apply the migrations.')
+            ->expectsOutput('Migration generation complete!')
+            ->assertSuccessful();
+
+        $this->assertSame([], $this->generatedFiles('migrations'));
+    }
+
+    public function test_a_verbose_dry_run_of_migrations_shows_their_code(): void
+    {
+        $this->artisan('atrium:bitrix:generate:migrations', ['--dry-run' => true, '--iblock' => [1], '--hlblock' => [1], '-v' => true])
+            ->expectsOutputToContain("Schema::create('news'")
+            ->expectsOutputToContain("Schema::create('brands'")
+            ->assertSuccessful();
+
+        $this->assertSame([], $this->generatedFiles('migrations'));
+    }
+
+    public function test_migrations_are_written_for_every_block(): void
+    {
+        $this->artisan('atrium:bitrix:generate:migrations', ['--force' => true, '--no-interaction' => true])
+            ->expectsOutputToContain('  Created [main]: ')
+            ->expectsOutputToContain('  Created [elements]: ')
+            ->expectsOutputToContain('  Created [demo_products.pivot_related]: ')
+            ->expectsOutput('Run "php artisan migrate" to apply the migrations.')
+            ->assertSuccessful();
+
+        $this->assertSame([
+            'create_brands_table.php',
+            'create_news_table.php',
+            'create_product_sections_table.php',
+            'create_products_table.php',
+            'create_news_link_goods_table.php',
+            'create_products_related_table.php',
+        ], $this->migrations());
+    }
+
+    public function test_blocks_asked_for_by_id_are_the_only_ones_generated(): void
+    {
+        $this->artisan('atrium:bitrix:generate:migrations', ['--iblock' => [1, 99], '--hlblock' => [1, 98], '--force' => true])
+            ->expectsOutput('IBlock 99 not found')
+            ->expectsOutput('Generating Highload Block migrations...')
+            ->expectsOutput('Highload Block 98 not found')
+            ->doesntExpectOutputToContain('Products')
+            ->doesntExpectOutputToContain('Available IBlocks:')
+            ->assertSuccessful();
+
+        $this->assertSame([
+            'create_news_table.php',
+            'create_news_link_goods_table.php',
+            'create_brands_table.php',
+        ], $this->migrations());
+    }
+
+    public function test_an_iblock_on_the_skip_list_is_left_out(): void
+    {
+        config(['atrium-bitrix.skip_iblocks' => [2]]);
+
+        $this->artisan('atrium:bitrix:generate:migrations', ['--iblock' => [1, 2], '--hlblock' => [99], '--force' => true])
+            ->expectsOutput('Skipping IBlock 2 (in skip list)')
+            ->doesntExpectOutput('Skipping IBlock 1 (in skip list)')
+            ->assertSuccessful();
+
+        $this->assertSame(['create_news_table.php', 'create_news_link_goods_table.php'], $this->migrations());
+    }
+
+    public function test_the_blocks_typed_in_are_the_ones_generated(): void
+    {
+        $this->artisan('atrium:bitrix:generate:migrations', ['--dry-run' => true])
+            ->expectsOutput('Available IBlocks:')
+            ->expectsTable(['ID', 'Code', 'Name', 'Type'], [
+                [1, 'demo_news', 'News', 'content'],
+                [2, 'demo_products', 'Products', 'catalog'],
+            ])
+            ->expectsQuestion('Enter IBlock IDs to process (comma-separated, or "all" for all)', ' 1, ,99')
+            ->expectsOutput('IBlock 99 not found')
+            ->expectsOutput('IBlock: News (demo_news)')
+            ->doesntExpectOutput('IBlock: Products (demo_products)')
+            ->expectsOutput('Available Highload Blocks:')
+            ->expectsTable(['ID', 'Name', 'Table'], [[1, 'Brands', 'b_hlbd_brands']])
+            ->expectsQuestion('Enter Highload Block IDs to process (comma-separated, or "all" for all)', '1')
+            ->expectsOutput('Highload Block: Brands')
+            ->assertSuccessful();
+    }
+
+    public function test_all_typed_in_any_case_takes_every_block(): void
+    {
+        $this->artisan('atrium:bitrix:generate:migrations', ['--dry-run' => true])
+            ->expectsQuestion('Enter IBlock IDs to process (comma-separated, or "all" for all)', 'ALL')
+            ->expectsQuestion('Enter Highload Block IDs to process (comma-separated, or "all" for all)', 'All')
+            ->expectsOutput('IBlock: News (demo_news)')
+            ->expectsOutput('IBlock: Products (demo_products)')
+            ->expectsOutput('  Skipping Brands (already generated as linked directory)')
+            ->assertSuccessful();
+    }
+
+    public function test_an_empty_answer_takes_no_block(): void
+    {
+        $this->artisan('atrium:bitrix:generate:migrations', ['--dry-run' => true])
+            ->expectsQuestion('Enter IBlock IDs to process (comma-separated, or "all" for all)', '')
+            ->expectsQuestion('Enter Highload Block IDs to process (comma-separated, or "all" for all)', '')
+            ->doesntExpectOutput('Generating IBlock migrations...')
+            ->doesntExpectOutput('Generating Highload Block migrations...')
+            ->expectsOutput('Migration generation complete!')
+            ->assertSuccessful();
+    }
+
+    public function test_a_bitrix_without_blocks_generates_nothing(): void
+    {
+        $this->bitrix()->table('b_iblock')->delete();
+        $this->bitrix()->table('b_hlblock_entity')->delete();
+
+        $this->artisan('atrium:bitrix:generate:migrations')
+            ->expectsOutput('No IBlocks found in Bitrix database.')
+            ->expectsOutput('No Highload Blocks found in Bitrix database.')
+            ->doesntExpectOutput('Available IBlocks:')
+            ->expectsOutput('Migration generation complete!')
+            ->assertSuccessful();
+
+        $this->artisan('atrium:bitrix:generate:models')
+            ->expectsOutput('No IBlocks found in Bitrix database.')
+            ->expectsOutput('No Highload Blocks found in Bitrix database.')
+            ->expectsOutput('Model generation complete!')
+            ->assertSuccessful();
+
+        $this->assertSame([], $this->generatedFiles('migrations'));
+        $this->assertSame([], $this->generatedFiles('models'));
+    }
+
+    public function test_an_existing_migration_is_kept_unless_confirmed(): void
+    {
+        $this->artisan('atrium:bitrix:generate:migrations', ['--iblock' => [1], '--hlblock' => [99], '--force' => true])->assertSuccessful();
+        $files = $this->generatedFiles('migrations');
+        $news = $this->workDir.'/migrations/'.$files[0];
+        file_put_contents($news, '<?php // edited by hand');
+
+        $this->artisan('atrium:bitrix:generate:migrations', ['--iblock' => [1], '--hlblock' => [99]])
+            ->expectsOutputToContain('  Migration for this table may already exist:')
+            ->expectsOutput('    '.$files[0])
+            ->expectsConfirmation('  Create new migration anyway?', 'no')
+            ->expectsOutputToContain('  Skipped: ')
+            ->expectsConfirmation('  Create new migration anyway?', 'yes')
+            ->expectsOutputToContain('  Created [demo_news.pivot_link_goods]: ')
+            ->assertSuccessful();
+
+        $this->assertSame('<?php // edited by hand', file_get_contents($news));
+    }
+
+    public function test_a_dry_run_of_models_lists_them_and_writes_nothing(): void
+    {
+        $models = $this->workDir.'/models';
+
+        $this->artisan('atrium:bitrix:generate:models', ['--dry-run' => true, '--no-interaction' => true])
+            ->expectsOutput('Generating IBlock models...')
+            ->expectsOutput('  Would create Element model: News')
+            ->expectsOutput("  Path: {$models}/News.php")
+            ->expectsOutput('  Would create Element model: Product')
+            ->expectsOutput('  Would create Section model: ProductSection')
+            ->expectsOutput("  Path: {$models}/ProductSection.php")
+            ->expectsOutput('Generating linked directory models...')
+            ->expectsOutput('Generating Highload Block models...')
+            ->expectsOutputToContain('  Would create Reference model: Brands')
+            ->expectsOutputToContain("  Path: {$models}/References/Brands.php")
+            ->doesntExpectOutput('  Would create Section model: NewsSection')
+            ->doesntExpectOutputToContain('class News')
+            ->doesntExpectOutputToContain('  Created: ')
+            ->expectsOutput('Model generation complete!')
+            ->assertSuccessful();
+
+        $this->assertSame([], $this->generatedFiles('models'));
+    }
+
+    public function test_a_verbose_dry_run_of_models_shows_their_code(): void
+    {
+        $this->artisan('atrium:bitrix:generate:models', ['--dry-run' => true, '--iblock' => [1], '--hlblock' => [1], '-v' => true])
+            ->expectsOutputToContain('class News extends Model')
+            ->expectsOutputToContain('class Brands extends Model')
+            ->assertSuccessful();
+
+        $this->assertSame([], $this->generatedFiles('models'));
+    }
+
+    public function test_models_asked_for_by_id_are_the_only_ones_written(): void
+    {
+        config(['atrium-bitrix.skip_iblocks' => [2]]);
+
+        $this->artisan('atrium:bitrix:generate:models', ['--iblock' => [1, 2, 99], '--hlblock' => [1, 98], '--force' => true])
+            ->expectsOutput('  Created: News')
+            ->expectsOutput('  Path: '.$this->workDir.'/models/News.php')
+            ->expectsOutput('Skipping IBlock 2 (in skip list)')
+            ->expectsOutput('IBlock 99 not found')
+            ->expectsOutput('  Created: Brands')
+            ->expectsOutput('Highload Block 98 not found')
+            ->doesntExpectOutput('Generating linked directory models...')
+            ->assertSuccessful();
+
+        $this->assertSame(['News.php', 'References/Brands.php'], $this->generatedFiles('models'));
+        $this->assertStringContainsString('class News extends Model', (string) file_get_contents($this->workDir.'/models/News.php'));
+    }
+
+    public function test_an_existing_model_is_overwritten_only_when_confirmed(): void
+    {
+        $news = $this->workDir.'/models/News.php';
+        file_put_contents($news, '<?php // edited by hand');
+
+        $this->artisan('atrium:bitrix:generate:models', ['--iblock' => [1], '--hlblock' => [99]])
+            ->expectsConfirmation('Model News already exists. Overwrite?', 'no')
+            ->expectsOutput('  Skipped: News')
+            ->doesntExpectOutput('  Created: News')
+            ->assertSuccessful();
+
+        $this->assertSame('<?php // edited by hand', file_get_contents($news));
+
+        $this->artisan('atrium:bitrix:generate:models', ['--iblock' => [1], '--hlblock' => [99]])
+            ->expectsConfirmation('Model News already exists. Overwrite?', 'yes')
+            ->expectsOutput('  Created: News')
+            ->assertSuccessful();
+
+        $this->assertStringContainsString('class News extends Model', (string) file_get_contents($news));
+    }
+}

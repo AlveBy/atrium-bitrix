@@ -1,0 +1,112 @@
+<?php
+
+/*
+ * This file is part of Atrium (https://github.com/AlveBy/atrium).
+ * Copyright (c) 2026 AlveBy. Licensed under the MIT License, see LICENSE.
+ */
+
+declare(strict_types=1);
+
+namespace Atrium\Bitrix\Tests\Unit\Commands;
+
+use Atrium\Admin\Models\Site;
+use Atrium\Bitrix\Tests\SyntheticTestCase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * migrate: every step in a row, each one skippable or declinable.
+ */
+final class MigrateAllCommandTest extends SyntheticTestCase
+{
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // "migrate" runs the default migration paths; the generated ones live here.
+        $this->app->make('migrator')->path($this->workDir.'/migrations');
+    }
+
+    public function test_a_forced_run_goes_through_every_step(): void
+    {
+        $this->artisan('atrium:bitrix:migrate', ['--force' => true, '--skip-files' => true, '--no-interaction' => true])
+            ->expectsOutput('║     Bitrix to Laravel Migration        ║')
+            ->expectsOutput('Step 1: Analyzing Bitrix database...')
+            ->expectsOutput('Moving sites...')
+            ->expectsOutput('Step 2: Generating migrations...')
+            ->expectsOutput('Step 3: Generating Eloquent models...')
+            ->expectsOutput('Step 4: Migrating data...')
+            ->expectsOutput('║     Migration complete!                ║')
+            ->expectsOutput('  - Models generated in: app/Models/')
+            ->expectsOutput('  4. Configure SEO and slugs')
+            ->assertSuccessful();
+
+        $this->assertTrue(Schema::hasTable('products'));
+        $this->assertSame(['Laptop Air', 'Laptop Pro', 'Office Suite'], DB::table('products')->orderBy('name')->pluck('name')->all());
+        $this->assertSame(['Contoso', 'Northwind'], DB::table('brands')->orderBy('name')->pluck('name')->all());
+        $this->assertContains('Product.php', $this->generatedFiles('models'));
+        $this->assertSame('s2', Site::query()->where('code', 's2')->value('code'));
+    }
+
+    public function test_declining_the_first_question_does_nothing(): void
+    {
+        $this->artisan('atrium:bitrix:migrate')
+            ->expectsConfirmation('This will perform a full migration from Bitrix. Continue?', 'no')
+            ->expectsOutput('Migration cancelled.')
+            ->doesntExpectOutput('Step 1: Analyzing Bitrix database...')
+            ->assertSuccessful();
+
+        $this->assertSame([], $this->generatedFiles('migrations'));
+        $this->assertNull(Site::query()->where('code', 's2')->first());
+    }
+
+    public function test_declined_steps_leave_the_database_alone(): void
+    {
+        // Ids as integers: from the command line they arrive as strings, and
+        // generate:migrations then fails on its int type hints (a known bug).
+        $this->artisan('atrium:bitrix:migrate', ['--iblock' => [1], '--hlblock' => [1]])
+            ->expectsConfirmation('This will perform a full migration from Bitrix. Continue?', 'yes')
+            ->expectsConfirmation('Run the generated migrations?', 'no')
+            ->expectsConfirmation('Migrate data from Bitrix?', 'no')
+            ->doesntExpectOutputToContain('Enter IBlock IDs')
+            ->expectsOutput('Step 4: Migrating data...')
+            ->expectsOutput('║     Migration complete!                ║')
+            ->assertSuccessful();
+
+        $this->assertNotSame([], $this->generatedFiles('migrations'));
+        $this->assertSame(['News.php', 'References/Brands.php'], $this->generatedFiles('models'));
+        $this->assertFalse(Schema::hasTable('news'));
+    }
+
+    public function test_skipped_steps_are_not_run_and_the_blocks_are_asked_for(): void
+    {
+        $this->artisan('atrium:bitrix:migrate', ['--skip-migrations' => true, '--skip-models' => true, '--skip-data' => true])
+            ->expectsConfirmation('This will perform a full migration from Bitrix. Continue?', 'yes')
+            ->expectsOutput('Step 1: Analyzing Bitrix database...')
+            ->expectsQuestion('Enter IBlock IDs to process (comma-separated, or "all" for all)', '1')
+            ->expectsQuestion('Enter Highload Block IDs to process (comma-separated, or "all" for all)', 'all')
+            ->doesntExpectOutput('Step 2: Generating migrations...')
+            ->doesntExpectOutput('Step 3: Generating Eloquent models...')
+            ->doesntExpectOutput('Step 4: Migrating data...')
+            ->expectsOutput('║     Migration complete!                ║')
+            ->assertSuccessful();
+
+        $this->assertSame([], $this->generatedFiles('migrations'));
+        $this->assertSame([], $this->generatedFiles('models'));
+        $this->assertSame('s2', Site::query()->where('code', 's2')->value('code'), 'sites move whatever is skipped');
+    }
+
+    public function test_the_named_connection_is_passed_to_every_step(): void
+    {
+        config(['database.connections.old' => config('database.connections.bitrix')]);
+        DB::connection('old')->setPdo($this->bitrix()->getPdo());
+        config(['database.connections.bitrix.database' => $this->workDir.'/no-such-dir/bitrix.sqlite']);
+        DB::purge('bitrix');
+
+        $this->artisan('atrium:bitrix:migrate', ['--connection' => 'old', '--force' => true, '--skip-files' => true, '--iblock' => [2], '--hlblock' => [1]])
+            ->doesntExpectOutputToContain('Cannot connect')
+            ->assertSuccessful();
+
+        $this->assertSame(3, DB::table('products')->count());
+    }
+}
