@@ -53,7 +53,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
     /**
      * Analyze IBlocks
      */
-    protected function analyzeIBlocks(?array $iblockIds, ?string $typeId): void
+    private function analyzeIBlocks(?array $iblockIds, ?string $typeId): void
     {
         $this->info('Analyzing IBlocks...');
 
@@ -75,12 +75,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
 
         $rows = [];
         foreach ($iblocks as $iblockData) {
-            $iblock = $analyzer->analyze((int) $iblockData['ID']);
-            if (! $iblock) {
-                continue;
-            }
-
-            $rows[] = $this->formatIBlockRow($iblock);
+            $rows[] = $this->formatIBlockRow($analyzer->analyzeRow($iblockData));
         }
 
         $this->displayTable([
@@ -197,7 +192,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
     /**
      * Analyze Highload Blocks
      */
-    protected function analyzeHlblocks(?array $hlblockIds): void
+    private function analyzeHlblocks(?array $hlblockIds): void
     {
         $this->info('Analyzing Highload Blocks...');
 
@@ -219,10 +214,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
 
         $rows = [];
         foreach ($hlblocks as $hlblockData) {
-            $hlblock = $analyzer->analyze((int) $hlblockData['ID']);
-            if (! $hlblock) {
-                continue;
-            }
+            $hlblock = $analyzer->analyzeRow($hlblockData);
 
             $rows[] = [
                 $hlblock->id,

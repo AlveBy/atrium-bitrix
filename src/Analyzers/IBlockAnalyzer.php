@@ -51,6 +51,19 @@ class IBlockAnalyzer
             return null;
         }
 
+        return $this->analyzeRow($data);
+    }
+
+    /**
+     * Analyze an IBlock whose b_iblock row is already at hand
+     */
+    public function analyzeRow(array $data): IBlock
+    {
+        return $this->analyzedIBlocks[$data['ID']] ??= $this->read($data);
+    }
+
+    private function read(array $data): IBlock
+    {
         $iblock = IBlock::fromArray($data);
 
         // Analyze properties
@@ -58,8 +71,6 @@ class IBlockAnalyzer
 
         // Analyze sections
         $this->analyzeSections($iblock);
-
-        $this->analyzedIBlocks[$iblockId] = $iblock;
 
         return $iblock;
     }
@@ -69,17 +80,7 @@ class IBlockAnalyzer
      */
     public function analyzeAll(?string $typeId = null): array
     {
-        $iblocks = $this->connection->getIBlocks($typeId);
-        $result = [];
-
-        foreach ($iblocks as $data) {
-            $iblock = $this->analyze((int) $data['ID']);
-            if ($iblock) {
-                $result[] = $iblock;
-            }
-        }
-
-        return $result;
+        return array_map($this->analyzeRow(...), $this->connection->getIBlocks($typeId));
     }
 
     /**

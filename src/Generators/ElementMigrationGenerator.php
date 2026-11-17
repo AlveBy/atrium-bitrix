@@ -111,7 +111,7 @@ PHP;
     /**
      * Generate property columns
      */
-    protected function generateColumns(IBlock $iblock): array
+    private function generateColumns(IBlock $iblock): array
     {
         $columns = [];
 

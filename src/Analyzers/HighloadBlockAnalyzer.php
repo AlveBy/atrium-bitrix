@@ -42,12 +42,23 @@ class HighloadBlockAnalyzer
             return null;
         }
 
+        return $this->analyzeRow($data);
+    }
+
+    /**
+     * Analyze a Highload Block whose b_hlblock_entity row is already at hand
+     */
+    public function analyzeRow(array $data): HighloadBlock
+    {
+        return $this->analyzedHlblocks[$data['ID']] ??= $this->read($data);
+    }
+
+    private function read(array $data): HighloadBlock
+    {
         $hlblock = HighloadBlock::fromArray($data);
 
         // Analyze fields
         $this->analyzeFields($hlblock);
-
-        $this->analyzedHlblocks[$hlblockId] = $hlblock;
 
         return $hlblock;
     }
@@ -70,7 +81,7 @@ class HighloadBlockAnalyzer
             return null;
         }
 
-        return $this->analyze((int) $data['ID']);
+        return $this->analyzeRow($data);
     }
 
     /**
@@ -78,17 +89,7 @@ class HighloadBlockAnalyzer
      */
     public function analyzeAll(): array
     {
-        $hlblocks = $this->connection->getHighloadBlocks();
-        $result = [];
-
-        foreach ($hlblocks as $data) {
-            $hlblock = $this->analyze((int) $data['ID']);
-            if ($hlblock) {
-                $result[] = $hlblock;
-            }
-        }
-
-        return $result;
+        return array_map($this->analyzeRow(...), $this->connection->getHighloadBlocks());
     }
 
     /**

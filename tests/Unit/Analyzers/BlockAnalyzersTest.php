@@ -75,6 +75,21 @@ final class BlockAnalyzersTest extends SyntheticTestCase
         $this->assertSame([1 => $first], $analyzer->getAnalyzedIBlocks());
     }
 
+    public function test_an_iblock_row_at_hand_is_analyzed_once(): void
+    {
+        $analyzer = $this->iblocks();
+        $row = (new BitrixConnection)->getIBlock(1);
+        $this->assertNotNull($row);
+
+        $iblock = $analyzer->analyzeRow($row);
+
+        $this->assertSame(1, $iblock->id);
+        $this->assertSame('News', $iblock->name);
+        $this->assertSame([1 => $iblock], $analyzer->getAnalyzedIBlocks());
+        $this->assertSame($iblock, $analyzer->analyzeRow([...$row, 'NAME' => 'Changed']));
+        $this->assertSame($iblock, $analyzer->analyze(1));
+    }
+
     public function test_all_iblocks_or_those_of_one_type_are_analyzed(): void
     {
         $this->assertSame([1, 2], array_map(static fn ($i): int => $i->id, $this->iblocks()->analyzeAll()));
@@ -260,6 +275,20 @@ final class BlockAnalyzersTest extends SyntheticTestCase
 
         $this->assertSame(1, $analyzer->analyzeByTableName('b_hlbd_brands')?->id);
         $this->assertNull($analyzer->analyzeByTableName('b_hlbd_colors'));
+    }
+
+    public function test_a_highload_block_row_at_hand_is_analyzed_once(): void
+    {
+        $analyzer = $this->hlblocks();
+        $row = (new BitrixConnection)->getHighloadBlock(1);
+        $this->assertNotNull($row);
+
+        $block = $analyzer->analyzeRow($row);
+
+        $this->assertSame('b_hlbd_brands', $block->tableName);
+        $this->assertSame([1 => $block], $analyzer->getAnalyzedHlblocks());
+        $this->assertSame($block, $analyzer->analyzeRow([...$row, 'TABLE_NAME' => 'b_hlbd_changed']));
+        $this->assertSame($block, $analyzer->analyze(1));
     }
 
     public function test_all_highload_blocks_and_their_summary(): void
