@@ -36,17 +36,6 @@ class BitrixConnection
     }
 
     /**
-     * Get all IBlock types
-     */
-    public function getIBlockTypes(): array
-    {
-        return $this->connection
-            ->table('b_iblock_type')
-            ->get()
-            ->toArray();
-    }
-
-    /**
      * Get all IBlocks
      */
     public function getIBlocks(?string $typeId = null): array
@@ -109,22 +98,6 @@ class BitrixConnection
             ->table('b_iblock_property_enum')
             ->where('PROPERTY_ID', $propertyId)
             ->orderBy('SORT')
-            ->get()
-            ->map(fn ($row) => (array) $row)
-            ->toArray();
-    }
-
-    /**
-     * Get all enum values for an IBlock
-     */
-    public function getIBlockEnumValues(int $iblockId): array
-    {
-        return $this->connection
-            ->table('b_iblock_property_enum as e')
-            ->join('b_iblock_property as p', 'e.PROPERTY_ID', '=', 'p.ID')
-            ->where('p.IBLOCK_ID', $iblockId)
-            ->select('e.*')
-            ->orderBy('e.SORT')
             ->get()
             ->map(fn ($row) => (array) $row)
             ->toArray();
@@ -307,18 +280,6 @@ class BitrixConnection
     }
 
     /**
-     * Get element sections (element can be in multiple sections)
-     */
-    public function getElementSections(int $elementId): array
-    {
-        return $this->connection
-            ->table('b_iblock_section_element')
-            ->where('IBLOCK_ELEMENT_ID', $elementId)
-            ->pluck('IBLOCK_SECTION_ID')
-            ->toArray();
-    }
-
-    /**
      * Get all Highload Blocks
      */
     public function getHighloadBlocks(): array
@@ -433,24 +394,6 @@ class BitrixConnection
     }
 
     /**
-     * Get multiple files by IDs
-     */
-    public function getFiles(array $fileIds): array
-    {
-        if (empty($fileIds)) {
-            return [];
-        }
-
-        return $this->connection
-            ->table('b_file')
-            ->whereIn('ID', $fileIds)
-            ->get()
-            ->map(fn ($row) => (array) $row)
-            ->keyBy('ID')
-            ->toArray();
-    }
-
-    /**
      * Check if table exists
      */
     public function tableExists(string $tableName): bool
@@ -508,42 +451,5 @@ class BitrixConnection
             ->table($tableName)
             ->where('IBLOCK_PROPERTY_ID', $propertyId)
             ->count();
-    }
-
-    /**
-     * Get SEO data for element
-     */
-    public function getElementSeo(int $iblockId, int $elementId): ?array
-    {
-        // Check if iproperty table exists
-        if (! $this->tableExists('b_iblock_iproperty')) {
-            return null;
-        }
-
-        $row = $this->connection
-            ->table('b_iblock_iproperty')
-            ->where('IBLOCK_ID', $iblockId)
-            ->where('ELEMENT_ID', $elementId)
-            ->first();
-
-        return $row ? (array) $row : null;
-    }
-
-    /**
-     * Get SEO data for section
-     */
-    public function getSectionSeo(int $iblockId, int $sectionId): ?array
-    {
-        if (! $this->tableExists('b_iblock_iproperty')) {
-            return null;
-        }
-
-        $row = $this->connection
-            ->table('b_iblock_iproperty')
-            ->where('IBLOCK_ID', $iblockId)
-            ->where('SECTION_ID', $sectionId)
-            ->first();
-
-        return $row ? (array) $row : null;
     }
 }
