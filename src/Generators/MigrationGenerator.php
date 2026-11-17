@@ -244,26 +244,6 @@ PHP;
     }
 
     /**
-     * Get section migration filename
-     */
-    protected function getSectionMigrationFilename(IBlock $iblock): string
-    {
-        $tableName = $this->naming->toSectionTableName($iblock->code);
-
-        return $this->naming->toMigrationFileName($tableName);
-    }
-
-    /**
-     * Get element migration filename
-     */
-    protected function getElementMigrationFilename(IBlock $iblock): string
-    {
-        $tableName = $this->naming->toTableName($iblock->code);
-
-        return $this->naming->toMigrationFileName($tableName);
-    }
-
-    /**
      * Get migrations directory path
      */
     public function getMigrationsPath(): string
@@ -280,41 +260,5 @@ PHP;
         file_put_contents($path, $content);
 
         return $path;
-    }
-
-    /**
-     * Write all migrations for IBlock
-     */
-    public function writeIBlockMigrations(IBlock $iblock): array
-    {
-        $migrations = $this->generateForIBlock($iblock);
-        $paths = [];
-
-        foreach ($migrations as $key => $migration) {
-            $paths[$key] = $this->writeMigration(
-                $migration['filename'],
-                $migration['content']
-            );
-        }
-
-        return $paths;
-    }
-
-    /**
-     * Write migration for Highload Block
-     */
-    public function writeHlblockMigration(HighloadBlock $hlblock): array
-    {
-        $migrations = $this->generateForHlblock($hlblock);
-        $paths = [];
-
-        foreach ($migrations as $key => $migration) {
-            $paths[$key] = $this->writeMigration(
-                $migration['filename'],
-                $migration['content']
-            );
-        }
-
-        return $paths;
     }
 }
