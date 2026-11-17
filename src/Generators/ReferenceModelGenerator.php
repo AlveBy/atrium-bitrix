@@ -160,7 +160,7 @@ class ReferenceModelGenerator
 
                 // We'll use a generic name since we don't have the linked HL block info
                 $class->addMethod($relationName)
-                    ->setReturnType('BelongsTo')
+                    ->setReturnType('Illuminate\\Database\\Eloquent\\Relations\\BelongsTo')
                     ->addComment('@return BelongsTo Relationship to linked reference')
                     ->setBody("return \$this->belongsTo(self::class, '{$columnName}');");
             }
