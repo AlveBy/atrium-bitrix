@@ -230,29 +230,28 @@ final class PropertyTypeMapperTest extends TestCase
     }
 
     /**
-     * @return iterable<string,array{IBlockProperty,bool,?string}>
+     * @return iterable<string,array{IBlockProperty,?string}>
      */
     public static function indexes(): iterable
     {
-        yield 'nothing set' => [self::property('S'), false, null];
-        yield 'filtrable' => [self::property('S', null, false, ['FILTRABLE' => 'Y']), true, 'index'];
-        yield 'smart filter' => [self::property('N', null, false, ['SMART_FILTER' => 'Y']), true, 'index'];
-        yield 'searchable string' => [self::property('S', null, false, ['SEARCHABLE' => 'Y']), true, 'fulltext'];
-        yield 'searchable html' => [self::property('S', 'HTML', false, ['SEARCHABLE' => 'Y']), true, 'fulltext'];
-        yield 'searchable number is not fulltext' => [self::property('N', null, false, ['SEARCHABLE' => 'Y']), true, null];
-        yield 'searchable and filtrable number' => [self::property('N', null, false, ['SEARCHABLE' => 'Y', 'FILTRABLE' => 'Y']), true, 'index'];
-        yield 'element link' => [self::property('E'), false, 'foreign'];
-        yield 'section link' => [self::property('G'), false, 'foreign'];
-        yield 'directory' => [self::property('S', 'directory'), false, 'foreign'];
-        yield 'filtrable element link is still foreign' => [self::property('E', null, false, ['FILTRABLE' => 'Y']), true, 'foreign'];
+        yield 'nothing set' => [self::property('S'), null];
+        yield 'filtrable' => [self::property('S', null, false, ['FILTRABLE' => 'Y']), 'index'];
+        yield 'smart filter' => [self::property('N', null, false, ['SMART_FILTER' => 'Y']), 'index'];
+        yield 'searchable string' => [self::property('S', null, false, ['SEARCHABLE' => 'Y']), 'fulltext'];
+        yield 'searchable html' => [self::property('S', 'HTML', false, ['SEARCHABLE' => 'Y']), 'fulltext'];
+        yield 'searchable number is not fulltext' => [self::property('N', null, false, ['SEARCHABLE' => 'Y']), null];
+        yield 'searchable and filtrable number' => [self::property('N', null, false, ['SEARCHABLE' => 'Y', 'FILTRABLE' => 'Y']), 'index'];
+        yield 'element link' => [self::property('E'), 'foreign'];
+        yield 'section link' => [self::property('G'), 'foreign'];
+        yield 'directory' => [self::property('S', 'directory'), 'foreign'];
+        yield 'filtrable element link is still foreign' => [self::property('E', null, false, ['FILTRABLE' => 'Y']), 'foreign'];
     }
 
     #[DataProvider('indexes')]
-    public function test_a_property_is_indexed_by_its_filter_flags(IBlockProperty $property, bool $indexed, ?string $type): void
+    public function test_a_property_is_indexed_by_its_filter_flags(IBlockProperty $property, ?string $type): void
     {
         $mapper = new PropertyTypeMapper;
 
-        $this->assertSame($indexed, $mapper->shouldIndex($property));
         $this->assertSame($type, $mapper->getIndexType($property));
     }
 

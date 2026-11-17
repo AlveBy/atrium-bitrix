@@ -22,12 +22,12 @@ use Nette\PhpGenerator\PsrPrinter;
 
 class SectionModelGenerator
 {
-    protected NamingConvention $naming;
+    private NamingConvention $naming;
 
-    protected string $namespace;
+    private string $namespace;
 
     /** Bitrix connection, needed for section user fields (UF_*). */
-    protected ?ConnectionInterface $bitrix = null;
+    private ?ConnectionInterface $bitrix = null;
 
     public function __construct(NamingConvention $naming, ?ConnectionInterface $bitrix = null)
     {
@@ -231,7 +231,7 @@ PHP);
      * Section form fields. Project columns (absent in Bitrix) are inserted
      * by their `after` key so regeneration neither drops nor shifts them.
      */
-    protected function buildSectionFields(string $tableName, SectionUserFields $userFields): string
+    private function buildSectionFields(string $tableName, SectionUserFields $userFields): string
     {
         $fields = [
             ['name' => 'parent_id', 'tab' => 'params', 'line' => "TreeSelectField::make('parent_id')->label(".Labels::standard('parent_section').')->model(self::class)'],
@@ -295,7 +295,7 @@ PHP);
         return implode("\n", $lines);
     }
 
-    protected function addUseStatements(PhpNamespace $namespace): void
+    private function addUseStatements(PhpNamespace $namespace): void
     {
         $namespace->addUse('Illuminate\\Database\\Eloquent\\Model');
         $namespace->addUse('Illuminate\\Database\\Eloquent\\Builder');

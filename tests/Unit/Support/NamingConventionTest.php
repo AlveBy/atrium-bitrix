@@ -278,18 +278,6 @@ final class NamingConventionTest extends TestCase
         $this->assertSame('news_news', $naming->toPivotTableName('news', 'news'));
     }
 
-    public function test_migration_class_and_file_names(): void
-    {
-        $naming = $this->naming();
-        $this->travelTo(new \DateTimeImmutable('2026-03-04 05:06:07'));
-
-        $this->assertSame('CreateProductsTable', $naming->toMigrationClassName('products'));
-        $this->assertSame('AlterProductsTable', $naming->toMigrationClassName('products', 'alter'));
-        $this->assertMatchesRegularExpression('/^\d{4}_\d{2}_\d{2}_\d{6}_create_products_table\.php$/', $naming->toMigrationFileName('products'));
-        $this->assertStringEndsWith('_alter_products_table.php', $naming->toMigrationFileName('products', 'alter'));
-        $this->assertStringStartsWith(date('Y_m_d_'), $naming->toMigrationFileName('products'));
-    }
-
     public function test_transliteration_covers_the_whole_alphabet_and_leaves_the_rest(): void
     {
         $naming = $this->naming();

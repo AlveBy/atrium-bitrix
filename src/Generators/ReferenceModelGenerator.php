@@ -21,13 +21,13 @@ use Nette\PhpGenerator\PsrPrinter;
 
 class ReferenceModelGenerator
 {
-    protected NamingConvention $naming;
+    private NamingConvention $naming;
 
-    protected PropertyTypeMapper $typeMapper;
+    private PropertyTypeMapper $typeMapper;
 
-    protected FieldTypeMapper $fieldMapper;
+    private FieldTypeMapper $fieldMapper;
 
-    protected string $namespace;
+    private string $namespace;
 
     public function __construct(
         NamingConvention $naming,
@@ -96,7 +96,7 @@ class ReferenceModelGenerator
     /**
      * Add use statements
      */
-    protected function addUseStatements(PhpNamespace $namespace, HighloadBlock $hlblock): void
+    private function addUseStatements(PhpNamespace $namespace, HighloadBlock $hlblock): void
     {
         $namespace->addUse('Illuminate\\Database\\Eloquent\\Model');
         $namespace->addUse('Illuminate\\Database\\Eloquent\\Relations\\BelongsTo');
@@ -114,7 +114,7 @@ class ReferenceModelGenerator
     /**
      * Get fillable fields
      */
-    protected function getFillable(HighloadBlock $hlblock): array
+    private function getFillable(HighloadBlock $hlblock): array
     {
         $fillable = [];
 
@@ -130,7 +130,7 @@ class ReferenceModelGenerator
     /**
      * Get casts
      */
-    protected function getCasts(HighloadBlock $hlblock): array
+    private function getCasts(HighloadBlock $hlblock): array
     {
         $casts = [];
 
@@ -148,7 +148,7 @@ class ReferenceModelGenerator
     /**
      * Add relationships
      */
-    protected function addRelationships(ClassType $class, HighloadBlock $hlblock): void
+    private function addRelationships(ClassType $class, HighloadBlock $hlblock): void
     {
         foreach ($hlblock->fields as $field) {
             if ($field->isHlblockReference() && $field->linkedHlblockId && ! $field->multiple) {
@@ -170,7 +170,7 @@ class ReferenceModelGenerator
     /**
      * Add admin methods
      */
-    protected function addAdminMethods(ClassType $class, HighloadBlock $hlblock): void
+    private function addAdminMethods(ClassType $class, HighloadBlock $hlblock): void
     {
         // getAdminLabel
         $class->addMethod('getAdminLabel')
@@ -196,7 +196,7 @@ class ReferenceModelGenerator
     /**
      * Generate fields method body
      */
-    protected function generateFieldsMethod(HighloadBlock $hlblock): string
+    private function generateFieldsMethod(HighloadBlock $hlblock): string
     {
         $lines = ['return ['];
 
@@ -216,7 +216,7 @@ class ReferenceModelGenerator
     /**
      * Generate single field line
      */
-    protected function generateFieldLine(array $config): string
+    private function generateFieldLine(array $config): string
     {
         $class = $config['class'];
         $name = $config['name'];
@@ -244,7 +244,7 @@ class ReferenceModelGenerator
     /**
      * Generate columns method body
      */
-    protected function generateColumnsMethod(HighloadBlock $hlblock): string
+    private function generateColumnsMethod(HighloadBlock $hlblock): string
     {
         $lines = ['return ['];
         $lines[] = "    TextColumn::make('id')->label('ID')->sortable(),";
@@ -279,7 +279,7 @@ class ReferenceModelGenerator
     /**
      * Add display value method (for dropdowns)
      */
-    protected function addDisplayValueMethod(ClassType $class, HighloadBlock $hlblock): void
+    private function addDisplayValueMethod(ClassType $class, HighloadBlock $hlblock): void
     {
         // Try to find a name-like field
         $nameField = null;

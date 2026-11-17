@@ -18,13 +18,13 @@ use Illuminate\Database\ConnectionInterface;
 
 class MigrationGenerator
 {
-    protected NamingConvention $naming;
+    private NamingConvention $naming;
 
-    protected PropertyTypeMapper $typeMapper;
+    private PropertyTypeMapper $typeMapper;
 
-    protected ElementMigrationGenerator $elementGenerator;
+    private ElementMigrationGenerator $elementGenerator;
 
-    protected SectionMigrationGenerator $sectionGenerator;
+    private SectionMigrationGenerator $sectionGenerator;
 
     public function __construct(
         NamingConvention $naming,
@@ -45,27 +45,15 @@ class MigrationGenerator
      * one iblock could come before the table of the iblock it links to, which
      * SQLite lets through and MySQL and PostgreSQL do not.
      */
-    protected ?string $timestamp = null;
+    private ?string $timestamp = null;
 
-    protected int $sequence = 0;
+    private int $sequence = 0;
 
-    protected function filename(string $tableName): string
+    private function filename(string $tableName): string
     {
-        $this->timestamp ??= date('Y_m_d_His');
+        $this->timestamp ??= now()->format('Y_m_d_His');
 
         return sprintf('%s_%04d_create_%s_table.php', $this->timestamp, ++$this->sequence, $tableName);
-    }
-
-    /**
-     * All migrations for an IBlock: its tables, then its link tables.
-     *
-     * When several iblocks link to each other, generate the tables of all of
-     * them first (generateTablesForIBlock) and the link tables after
-     * (generatePivotsForIBlock).
-     */
-    public function generateForIBlock(IBlock $iblock): array
-    {
-        return $this->generateTablesForIBlock($iblock) + $this->generatePivotsForIBlock($iblock);
     }
 
     /**
@@ -113,7 +101,6 @@ class MigrationGenerator
     public function generateForHlblock(HighloadBlock $hlblock): array
     {
         $tableName = $this->naming->hlblockToTableName($hlblock->tableName);
-        $className = $this->naming->toMigrationClassName($tableName);
 
         $content = $this->generateHlblockMigration($hlblock, $tableName);
 
@@ -128,7 +115,7 @@ class MigrationGenerator
     /**
      * Generate HL block migration content
      */
-    protected function generateHlblockMigration(HighloadBlock $hlblock, string $tableName): string
+    private function generateHlblockMigration(HighloadBlock $hlblock, string $tableName): string
     {
         $columns = [];
 
@@ -170,72 +157,25 @@ PHP;
     /**
      * Build column definition string
      */
-    protected function buildColumnDefinition(string $name, array $def): string
+    private function buildColumnDefinition(string $name, array $def): string
     {
         $type = $def['type'];
         $line = '$table->';
 
-        switch ($type) {
-            case 'string':
-                $length = $def['length'] ?? 255;
-                $line .= "string('{$name}', {$length})";
-                break;
-
-            case 'text':
-                $line .= "text('{$name}')";
-                break;
-
-            case 'longText':
-                $line .= "longText('{$name}')";
-                break;
-
-            case 'integer':
-                $line .= "integer('{$name}')";
-                break;
-
-            case 'unsignedBigInteger':
-                $line .= "unsignedBigInteger('{$name}')";
-                break;
-
-            case 'decimal':
-                $precision = $def['precision'] ?? 18;
-                $scale = $def['scale'] ?? 4;
-                $line .= "decimal('{$name}', {$precision}, {$scale})";
-                break;
-
-            case 'boolean':
-                $line .= "boolean('{$name}')";
-                break;
-
-            case 'date':
-                $line .= "date('{$name}')";
-                break;
-
-            case 'datetime':
-                $line .= "dateTime('{$name}')";
-                break;
-
-            case 'json':
-                $line .= "json('{$name}')";
-                break;
-
-            case 'foreignId':
-                $line .= "foreignId('{$name}')";
-                break;
-
-            default:
-                $line .= "string('{$name}')";
-        }
+        $arguments = match ($type) {
+            'string' => ", {$def['length']}",
+            'decimal' => ", {$def['precision']}, {$def['scale']}",
+            default => '',
+        };
+        $method = $type === 'datetime' ? 'dateTime' : $type;
+        $line .= "{$method}('{$name}'{$arguments})";
 
         if ($def['nullable'] ?? false) {
             $line .= '->nullable()';
         }
 
         if (isset($def['default'])) {
-            $default = is_bool($def['default'])
-                ? ($def['default'] ? 'true' : 'false')
-                : "'{$def['default']}'";
-            $line .= "->default({$default})";
+            $line .= '->default('.var_export($def['default'], true).')';
         }
 
         $line .= ';';
@@ -249,16 +189,5 @@ PHP;
     public function getMigrationsPath(): string
     {
         return GeneratedPaths::migrations();
-    }
-
-    /**
-     * Write migration to file
-     */
-    public function writeMigration(string $filename, string $content): string
-    {
-        $path = $this->getMigrationsPath().'/'.$filename;
-        file_put_contents($path, $content);
-
-        return $path;
     }
 }

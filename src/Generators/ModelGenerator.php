@@ -30,31 +30,31 @@ use Nette\PhpGenerator\PsrPrinter;
 
 class ModelGenerator
 {
-    protected NamingConvention $naming;
+    private NamingConvention $naming;
 
-    protected PropertyTypeMapper $typeMapper;
+    private PropertyTypeMapper $typeMapper;
 
-    protected FieldTypeMapper $fieldMapper;
+    private FieldTypeMapper $fieldMapper;
 
-    protected string $namespace;
+    private string $namespace;
 
     /**
      * Bitrix connection, needed to read the saved form layout.
      * Without it the generator falls back to name-based heuristics.
      */
-    protected ?ConnectionInterface $bitrix;
+    private ?ConnectionInterface $bitrix;
 
     /** Form layout of the current iblock; filled in generate(). */
-    protected ?BitrixFormLayout $layout = null;
+    private ?BitrixFormLayout $layout = null;
 
     /** Tabs that actually ended up holding fields; filled in generateFieldsMethod(). */
-    protected array $usedTabs = [];
+    private array $usedTabs = [];
 
     /** List layout of the current iblock; filled in generate(). */
-    protected ?BitrixListLayout $listLayout = null;
+    private ?BitrixListLayout $listLayout = null;
 
     /** Captions of the current iblock (element name, "add element" button); filled in generate(). */
-    protected ?BitrixIblockMessages $messages = null;
+    private ?BitrixIblockMessages $messages = null;
 
     public function __construct(
         NamingConvention $naming,
@@ -72,7 +72,7 @@ class ModelGenerator
     /**
      * List columns as configured in the Bitrix admin.
      */
-    protected function loadListLayout(IBlock $iblock): ?BitrixListLayout
+    private function loadListLayout(IBlock $iblock): ?BitrixListLayout
     {
         if ($this->bitrix === null) {
             return null;
@@ -89,7 +89,7 @@ class ModelGenerator
     /**
      * Iblock captions: what the element is called and the label of its "add" button.
      */
-    protected function loadMessages(IBlock $iblock): ?BitrixIblockMessages
+    private function loadMessages(IBlock $iblock): ?BitrixIblockMessages
     {
         if ($this->bitrix === null) {
             return null;
@@ -103,7 +103,7 @@ class ModelGenerator
      * Editors compare the new admin with the old one line by line, so the
      * form is built from the saved layout rather than guessed from field names.
      */
-    protected function loadLayout(IBlock $iblock): ?BitrixFormLayout
+    private function loadLayout(IBlock $iblock): ?BitrixFormLayout
     {
         if ($this->bitrix === null) {
             return null;
@@ -185,7 +185,7 @@ class ModelGenerator
     /**
      * Add use statements
      */
-    protected function addUseStatements(PhpNamespace $namespace, IBlock $iblock): void
+    private function addUseStatements(PhpNamespace $namespace, IBlock $iblock): void
     {
         $namespace->addUse('Illuminate\\Database\\Eloquent\\Model');
         $namespace->addUse('Illuminate\\Database\\Eloquent\\Relations\\BelongsTo');
@@ -232,7 +232,7 @@ class ModelGenerator
     /**
      * Add interfaces
      */
-    protected function addInterfaces(ClassType $class, IBlock $iblock): void
+    private function addInterfaces(ClassType $class, IBlock $iblock): void
     {
         $class->addImplement('Atrium\\Admin\\Contracts\\Administrable');
     }
@@ -240,7 +240,7 @@ class ModelGenerator
     /**
      * Add traits
      */
-    protected function addTraits(ClassType $class, IBlock $iblock): void
+    private function addTraits(ClassType $class, IBlock $iblock): void
     {
         $class->addTrait('Atrium\\Admin\\Traits\\InteractsWithAdmin');
         $class->addTrait('Atrium\\Admin\\Traits\\HasAdminSlug');
@@ -255,7 +255,7 @@ class ModelGenerator
     /**
      * Get fillable properties
      */
-    protected function getFillableProperties(IBlock $iblock): array
+    private function getFillableProperties(IBlock $iblock): array
     {
         $fillable = [
             'name',
@@ -301,7 +301,7 @@ class ModelGenerator
     /**
      * Get casts array
      */
-    protected function getCasts(IBlock $iblock): array
+    private function getCasts(IBlock $iblock): array
     {
         $casts = [
             'active' => 'boolean',
@@ -331,7 +331,7 @@ class ModelGenerator
     /**
      * Add relationships
      */
-    protected function addRelationships(ClassType $class, IBlock $iblock): void
+    private function addRelationships(ClassType $class, IBlock $iblock): void
     {
         $mainTable = $this->naming->toTableName($iblock->code);
 
@@ -359,7 +359,7 @@ class ModelGenerator
     /**
      * Add element link relationship
      */
-    protected function addElementLinkRelation(ClassType $class, IBlockProperty $property, string $mainTable): void
+    private function addElementLinkRelation(ClassType $class, IBlockProperty $property, string $mainTable): void
     {
         $relationName = $this->naming->toRelationName($property->code, $property->multiple);
         $columnName = $this->naming->toColumnName($property->code);
@@ -390,7 +390,7 @@ class ModelGenerator
     /**
      * Add section link relationship
      */
-    protected function addSectionLinkRelation(ClassType $class, IBlockProperty $property, string $mainTable): void
+    private function addSectionLinkRelation(ClassType $class, IBlockProperty $property, string $mainTable): void
     {
         $relationName = $this->naming->toRelationName($property->code, $property->multiple);
         $columnName = $this->naming->toColumnName($property->code);
@@ -421,7 +421,7 @@ class ModelGenerator
     /**
      * Add directory (HL block) relationship
      */
-    protected function addDirectoryRelation(ClassType $class, IBlockProperty $property, string $mainTable): void
+    private function addDirectoryRelation(ClassType $class, IBlockProperty $property, string $mainTable): void
     {
         $relationName = $this->naming->toRelationName($property->code, $property->multiple);
         $columnName = $this->naming->toColumnName($property->code);
@@ -456,7 +456,7 @@ class ModelGenerator
     /**
      * Add admin panel methods
      */
-    protected function addAdminMethods(ClassType $class, IBlock $iblock): void
+    private function addAdminMethods(ClassType $class, IBlock $iblock): void
     {
         // getAdminLabel
         $class->addMethod('getAdminLabel')
@@ -510,7 +510,7 @@ class ModelGenerator
     /**
      * Generate tabs method body
      */
-    protected function generateTabsMethod(IBlock $iblock): string
+    private function generateTabsMethod(IBlock $iblock): string
     {
         // If there is a Bitrix layout, take its tabs as they are: the set,
         // the captions (the element's own name rather than a generic "Params")
@@ -556,7 +556,7 @@ class ModelGenerator
     /**
      * Generate fields method body
      */
-    protected function generateFieldsMethod(IBlock $iblock): string
+    private function generateFieldsMethod(IBlock $iblock): string
     {
         // A Bitrix property with CODE=NAME is a distinct business field (the
         // submitter's full name on the contact forms), but it shares the base column,
@@ -682,7 +682,7 @@ class ModelGenerator
      * invent an extra tab or the field disappears, and such iblocks may hold
      * real content there.
      */
-    protected function resolveTab(string $key, string $defaultTab): string
+    private function resolveTab(string $key, string $defaultTab): string
     {
         $fromLayout = $this->layout?->tabFor($key);
 
@@ -700,7 +700,7 @@ class ModelGenerator
     /**
      * Tab caption for the comment in the generated code.
      */
-    protected function tabLabel(string $name): string
+    private function tabLabel(string $name): string
     {
         foreach ($this->layout?->tabs() ?? [] as $tab) {
             if ($tab['name'] === $name) {
@@ -720,7 +720,7 @@ class ModelGenerator
     /**
      * List columns according to the Bitrix admin settings.
      */
-    protected function generateColumnsFromLayout(IBlock $iblock, string $nameLabel): string
+    private function generateColumnsFromLayout(IBlock $iblock, string $nameLabel): string
     {
         // Properties by column name, to take the label and type from the property itself.
         $properties = [];
@@ -763,7 +763,7 @@ class ModelGenerator
      * property; for base fields (active, updated_at...) Bitrix stores no
      * label, so the decision is made by name.
      */
-    protected function columnLine(
+    private function columnLine(
         string $name,
         ?IBlockProperty $property,
         string $nameLabel,
@@ -809,7 +809,7 @@ class ModelGenerator
     /**
      * Generate single field line
      */
-    protected function generateFieldLine(array $config): string
+    private function generateFieldLine(array $config): string
     {
         $class = $config['class'];
         $name = $config['name'];
@@ -859,7 +859,7 @@ class ModelGenerator
     /**
      * Determine which tab a field belongs to based on its name
      */
-    protected function determineFieldTab(string $fieldName): string
+    private function determineFieldTab(string $fieldName): string
     {
         $previewFields = ['preview_text', 'preview_picture'];
         $detailFields = ['detail_text', 'detail_picture', 'photos', 'documents', 'big_photos', 'gallery', 'planirovka'];
@@ -885,14 +885,14 @@ class ModelGenerator
      * lost entirely; instead the base field adopts its Bitrix label (e.g. 'name'
      * becomes "Your name" on the order forms rather than the generic "Name").
      */
-    protected function nameLabel(IBlock $iblock): string
+    private function nameLabel(IBlock $iblock): string
     {
         $label = $this->getReservedPropertyLabel($iblock, 'name');
 
         return $label !== null ? Labels::literal($label) : Labels::standard('name');
     }
 
-    protected function getReservedPropertyLabel(IBlock $iblock, string $column): ?string
+    private function getReservedPropertyLabel(IBlock $iblock, string $column): ?string
     {
         foreach ($iblock->properties as $property) {
             if ($this->naming->toColumnName($property->code) !== $column) {
@@ -912,7 +912,7 @@ class ModelGenerator
     /**
      * Generate columns method body
      */
-    protected function generateColumnsMethod(IBlock $iblock): string
+    private function generateColumnsMethod(IBlock $iblock): string
     {
         $lines = ['return ['];
 
@@ -963,7 +963,7 @@ class ModelGenerator
     /**
      * Add scopes
      */
-    protected function addScopes(ClassType $class, IBlock $iblock): void
+    private function addScopes(ClassType $class, IBlock $iblock): void
     {
         // Active scope
         $scopeActive = $class->addMethod('scopeActive')

@@ -214,14 +214,6 @@ class PropertyTypeMapper
     }
 
     /**
-     * Determine if property should have an index
-     */
-    public function shouldIndex(IBlockProperty $property): bool
-    {
-        return $property->filtrable || $property->smartFilter || $property->searchable;
-    }
-
-    /**
      * Get index type for property
      */
     public function getIndexType(IBlockProperty $property): ?string

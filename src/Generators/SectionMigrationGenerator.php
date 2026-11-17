@@ -16,10 +16,10 @@ use Illuminate\Database\ConnectionInterface;
 
 class SectionMigrationGenerator
 {
-    protected NamingConvention $naming;
+    private NamingConvention $naming;
 
     /** Bitrix connection, needed for section user fields (UF_*). */
-    protected ?ConnectionInterface $bitrix;
+    private ?ConnectionInterface $bitrix;
 
     public function __construct(NamingConvention $naming, ?ConnectionInterface $bitrix = null)
     {
@@ -98,15 +98,5 @@ return new class extends Migration
     }
 };
 PHP;
-    }
-
-    /**
-     * Get migration filename
-     */
-    public function getFilename(IBlock $iblock): string
-    {
-        $tableName = $this->naming->toSectionTableName($iblock->code);
-
-        return $this->naming->toMigrationFileName($tableName);
     }
 }

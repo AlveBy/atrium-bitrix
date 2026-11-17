@@ -267,24 +267,6 @@ class NamingConvention
     }
 
     /**
-     * Generate migration class name
-     */
-    public function toMigrationClassName(string $tableName, string $action = 'create'): string
-    {
-        return Str::studly($action.'_'.$tableName.'_table');
-    }
-
-    /**
-     * Generate migration file name
-     */
-    public function toMigrationFileName(string $tableName, string $action = 'create'): string
-    {
-        $timestamp = date('Y_m_d_His');
-
-        return $timestamp.'_'.$action.'_'.$tableName.'_table.php';
-    }
-
-    /**
      * Transliterate Russian characters to Latin
      */
     public function transliterate(string $text): string

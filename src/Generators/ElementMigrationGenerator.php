@@ -18,18 +18,9 @@ use Illuminate\Support\Str;
 
 class ElementMigrationGenerator
 {
-    protected NamingConvention $naming;
+    private NamingConvention $naming;
 
-    protected PropertyTypeMapper $typeMapper;
-
-    /**
-     * Reserved column names that are already defined in base element structure
-     * Properties with these codes will be skipped to avoid duplicates
-     *
-     * Shared with ModelGenerator via ReservedColumns so the migration and the
-     * model cannot disagree about which property codes the base structure owns.
-     */
-    protected array $reservedColumns = ReservedColumns::NAMES;
+    private PropertyTypeMapper $typeMapper;
 
     public function __construct(NamingConvention $naming, PropertyTypeMapper $typeMapper)
     {
@@ -123,8 +114,9 @@ PHP;
 
             $columnName = $this->naming->toColumnName($property->code);
 
-            // Skip properties that conflict with base element columns
-            if (in_array($columnName, $this->reservedColumns, true)) {
+            // Skip properties that conflict with base element columns (ReservedColumns is shared with
+            // ModelGenerator, so the migration and the model agree on which codes the base structure owns)
+            if (ReservedColumns::has($columnName)) {
                 continue;
             }
 
@@ -137,73 +129,26 @@ PHP;
     /**
      * Build column definition string
      */
-    protected function buildColumnDefinition(string $name, array $def, IBlockProperty $property): string
+    private function buildColumnDefinition(string $name, array $def, IBlockProperty $property): string
     {
         $type = $def['type'];
         $line = '$table->';
         $comment = $property->name;
 
-        switch ($type) {
-            case 'string':
-                $length = $def['length'] ?? 255;
-                $line .= "string('{$name}', {$length})";
-                break;
-
-            case 'text':
-                $line .= "text('{$name}')";
-                break;
-
-            case 'longText':
-                $line .= "longText('{$name}')";
-                break;
-
-            case 'integer':
-                $line .= "integer('{$name}')";
-                break;
-
-            case 'unsignedBigInteger':
-                $line .= "unsignedBigInteger('{$name}')";
-                break;
-
-            case 'decimal':
-                $precision = $def['precision'] ?? 18;
-                $scale = $def['scale'] ?? 4;
-                $line .= "decimal('{$name}', {$precision}, {$scale})";
-                break;
-
-            case 'boolean':
-                $line .= "boolean('{$name}')";
-                break;
-
-            case 'date':
-                $line .= "date('{$name}')";
-                break;
-
-            case 'datetime':
-                $line .= "dateTime('{$name}')";
-                break;
-
-            case 'json':
-                $line .= "json('{$name}')";
-                break;
-
-            case 'foreignId':
-                $line .= "foreignId('{$name}')";
-                break;
-
-            default:
-                $line .= "string('{$name}')";
-        }
+        $arguments = match ($type) {
+            'string' => ", {$def['length']}",
+            'decimal' => ", {$def['precision']}, {$def['scale']}",
+            default => '',
+        };
+        $method = $type === 'datetime' ? 'dateTime' : $type;
+        $line .= "{$method}('{$name}'{$arguments})";
 
         if ($def['nullable'] ?? false) {
             $line .= '->nullable()';
         }
 
         if (isset($def['default'])) {
-            $default = is_bool($def['default'])
-                ? ($def['default'] ? 'true' : 'false')
-                : var_export($def['default'], true);
-            $line .= "->default({$default})";
+            $line .= '->default('.var_export($def['default'], true).')';
         }
 
         $line .= "->comment('{$comment}');";
@@ -214,19 +159,15 @@ PHP;
     /**
      * Generate foreign key constraints
      */
-    protected function generateForeignKeys(IBlock $iblock): array
+    private function generateForeignKeys(IBlock $iblock): array
     {
         $foreignKeys = [];
 
         foreach ($iblock->properties as $property) {
-            if ($property->needsPivotTable()) {
-                continue;
-            }
-
             $columnName = $this->naming->toColumnName($property->code);
 
             // Skip reserved columns
-            if (in_array($columnName, $this->reservedColumns, true)) {
+            if (ReservedColumns::has($columnName)) {
                 continue;
             }
 
@@ -259,28 +200,20 @@ PHP;
     /**
      * Generate indexes
      */
-    protected function generateIndexes(IBlock $iblock): array
+    private function generateIndexes(IBlock $iblock): array
     {
         $indexes = [];
 
         foreach ($iblock->properties as $property) {
-            if ($property->needsPivotTable()) {
-                continue;
-            }
-
             $columnName = $this->naming->toColumnName($property->code);
 
             // Skip reserved columns
-            if (in_array($columnName, $this->reservedColumns, true)) {
+            if (ReservedColumns::has($columnName)) {
                 continue;
             }
 
-            if ($this->typeMapper->shouldIndex($property)) {
-                $indexType = $this->typeMapper->getIndexType($property);
-
-                if ($indexType === 'index' && ! $property->isElementLink() && ! $property->isSectionLink()) {
-                    $indexes[] = "\$table->index('{$columnName}');";
-                }
+            if ($this->typeMapper->getIndexType($property) === 'index') {
+                $indexes[] = "\$table->index('{$columnName}');";
             }
         }
 
@@ -319,7 +252,7 @@ PHP;
     /**
      * Generate single pivot table migration
      */
-    protected function generatePivotMigration(IBlockProperty $property, string $mainTable, IBlock $iblock): ?string
+    private function generatePivotMigration(IBlockProperty $property, string $mainTable, IBlock $iblock): ?string
     {
         $columnName = $this->naming->toColumnName($property->code);
         $pivotTableName = "{$mainTable}_{$columnName}";
