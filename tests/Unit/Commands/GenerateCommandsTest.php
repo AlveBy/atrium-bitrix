@@ -190,6 +190,29 @@ final class GenerateCommandsTest extends SyntheticTestCase
         $this->assertSame('<?php // edited by hand', file_get_contents($news));
     }
 
+    public function test_a_migration_of_the_table_written_earlier_under_another_number_is_found(): void
+    {
+        $earlier = '2020_01_01_000000_0007_create_news_table.php';
+        file_put_contents($this->workDir.'/migrations/'.$earlier, '<?php // earlier run');
+
+        $this->artisan('atrium:bitrix:generate:migrations', ['--iblock' => [1], '--hlblock' => [99]])
+            ->expectsOutputToContain('  Migration for this table may already exist:')
+            ->expectsOutput('    '.$earlier)
+            ->expectsConfirmation('  Create new migration anyway?', 'no')
+            ->expectsOutputToContain('  Skipped: ')
+            ->assertSuccessful();
+    }
+
+    public function test_a_migration_of_another_table_does_not_count_as_existing(): void
+    {
+        file_put_contents($this->workDir.'/migrations/2020_01_01_000000_0007_create_orders_table.php', '<?php');
+
+        $this->artisan('atrium:bitrix:generate:migrations', ['--iblock' => [1], '--hlblock' => [99]])
+            ->doesntExpectOutputToContain('may already exist')
+            ->expectsOutputToContain('_0001_create_news_table.php')
+            ->assertSuccessful();
+    }
+
     public function test_a_dry_run_of_models_lists_them_and_writes_nothing(): void
     {
         $models = $this->workDir.'/models';

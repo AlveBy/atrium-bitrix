@@ -256,8 +256,8 @@ class GenerateMigrationsCommand extends AbstractBitrixCommand
      */
     protected function extractTableName(string $filename): string
     {
-        // Remove timestamp and extension
-        $name = preg_replace('/^\d{4}_\d{2}_\d{2}_\d+_/', '', $filename);
+        // Remove timestamp, sequence number and extension
+        $name = preg_replace('/^\d{4}_\d{2}_\d{2}_\d{6}_\d{4}_/', '', $filename);
         $name = str_replace('.php', '', $name);
         // Remove create_ prefix and _table suffix
         $name = preg_replace('/^create_/', '', $name);
