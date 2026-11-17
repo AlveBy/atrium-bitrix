@@ -306,7 +306,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
             }
 
             if ($mismatches === 0) {
-                $this->info("    All {$sampleSize} records match");
+                $this->info('    All '.count($sampleIds).' records match');
             } else {
                 $this->warn("    {$mismatches} of ".count($sampleIds).' with mismatches');
             }
@@ -357,7 +357,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
         }
 
         // Section ID (only if iblock has sections)
-        if (! empty($iblock->sections) && isset($laravelRow['section_id'])) {
+        if (! empty($iblock->sections) && array_key_exists('section_id', $laravelRow)) {
             $bitrixSectionId = ! empty($bitrixElement['IBLOCK_SECTION_ID'])
                 ? (int) $bitrixElement['IBLOCK_SECTION_ID']
                 : null;

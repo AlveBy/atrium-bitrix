@@ -133,8 +133,7 @@ final class VerifyDataCommandTest extends SyntheticTestCase
             ->expectsOutput('    ID 3: OK')
             ->expectsOutput('    2 of 3 with mismatches')
             ->expectsOutput('  News (news): checking 2 records...')
-            // It counts the sample asked for, not the records checked.
-            ->expectsOutput('    All 5 records match')
+            ->expectsOutput('    All 2 records match')
             ->expectsOutput('Checks: 11 | OK: 6 | Failed: 5')
             ->assertFailed();
     }
@@ -161,13 +160,13 @@ final class VerifyDataCommandTest extends SyntheticTestCase
         DB::table('products')->where('id', 1)->update(['detail_text' => 'Rewritten, same presence', 'section_id' => null]);
 
         $this->artisan('atrium:bitrix:verify', ['--iblock' => [2], '--hlblock' => [9], '-v' => true])
-            ->expectsOutput('    ID 1: OK')
+            ->expectsOutput('    ID 1: 1 mismatches')
+            ->expectsOutput('      section_id: Bitrix="2" vs Laravel="null"')
             ->expectsOutput('    ID 2: 1 mismatches')
             ->expectsOutput('      detail_text: Bitrix="present (11 chars)" vs Laravel="empty"')
             ->expectsOutput('    ID 3: 1 mismatches')
             ->expectsOutput('      detail_text: Bitrix="empty" vs Laravel="present (11 chars)"')
             ->doesntExpectOutputToContain('preview_text:')
-            ->doesntExpectOutputToContain('section_id:')
             ->assertFailed();
     }
 
