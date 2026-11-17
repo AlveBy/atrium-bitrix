@@ -26,8 +26,6 @@ use Symfony\Component\Console\Output\OutputInterface;
  * Bitrix and what migrate:data wrote.
  *
  * Every test runs the command once: its counters outlive a run (a known bug).
- * Ids are integers: from the command line they are strings, and the
- * analyzers' int type hints fail on them (a known bug).
  */
 final class VerifyDataCommandTest extends SyntheticTestCase
 {

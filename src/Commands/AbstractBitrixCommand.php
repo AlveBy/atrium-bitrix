@@ -26,6 +26,17 @@ abstract class AbstractBitrixCommand extends Command
     protected ?NamingConvention $naming = null;
 
     /**
+     * The IDs given in a repeatable option (--iblock=2 --iblock=5), as
+     * integers: the command line hands them over as strings. null: none given.
+     *
+     * @return array<int,int>|null
+     */
+    protected function idsOption(string $name): ?array
+    {
+        return array_map('intval', $this->option($name)) ?: null;
+    }
+
+    /**
      * Get Bitrix connection
      */
     protected function getBitrixConnection(): BitrixConnection

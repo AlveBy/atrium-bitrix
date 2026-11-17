@@ -17,9 +17,6 @@ use Illuminate\Support\Facades\Schema;
 /**
  * migrate:data beyond the full run: blocks that are missing, skipped or
  * empty, rows that cannot be written, files, and every kind of link table.
- *
- * Ids are passed as integers: from the command line they arrive as strings
- * and the analyzers' int type hints fail on them (a known bug).
  */
 final class MigrateDataCommandTest extends SyntheticTestCase
 {

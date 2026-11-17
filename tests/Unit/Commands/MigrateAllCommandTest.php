@@ -62,8 +62,6 @@ final class MigrateAllCommandTest extends SyntheticTestCase
 
     public function test_declined_steps_leave_the_database_alone(): void
     {
-        // Ids as integers: from the command line they arrive as strings, and
-        // generate:migrations then fails on its int type hints (a known bug).
         $this->artisan('atrium:bitrix:migrate', ['--iblock' => [1], '--hlblock' => [1]])
             ->expectsConfirmation('This will perform a full migration from Bitrix. Continue?', 'yes')
             ->expectsConfirmation('Run the generated migrations?', 'no')

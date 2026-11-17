@@ -45,8 +45,8 @@ class GenerateMigrationsCommand extends AbstractBitrixCommand
 
         $this->initializeGenerator();
 
-        $iblockIds = $this->option('iblock') ?: null;
-        $hlblockIds = $this->option('hlblock') ?: null;
+        $iblockIds = $this->idsOption('iblock');
+        $hlblockIds = $this->idsOption('hlblock');
         $dryRun = $this->option('dry-run');
 
         // Process IBlocks

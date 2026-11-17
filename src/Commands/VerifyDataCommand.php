@@ -42,8 +42,8 @@ class VerifyDataCommand extends AbstractBitrixCommand
             return self::FAILURE;
         }
 
-        $iblockIds = $this->option('iblock') ?: null;
-        $hlblockIds = $this->option('hlblock') ?: null;
+        $iblockIds = $this->idsOption('iblock');
+        $hlblockIds = $this->idsOption('hlblock');
 
         // Select what to verify
         $hlblockIds = $hlblockIds ?: $this->selectHlblocks();

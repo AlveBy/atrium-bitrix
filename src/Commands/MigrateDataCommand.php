@@ -60,10 +60,8 @@ class MigrateDataCommand extends AbstractBitrixCommand
         $this->chunkSize = (int) $this->option('chunk');
         $this->skipFiles = (bool) $this->option('skip-files');
 
-        $iblockIds = $this->option('iblock') ?: null;
-        // Read through the input: atrium:bitrix:sync extends this class for
-        // its helpers, has no --hlblock and never runs this handle().
-        $hlblockIds = $this->input->getOption('hlblock') ?: null;
+        $iblockIds = $this->idsOption('iblock');
+        $hlblockIds = $this->idsOption('hlblock');
 
         // Migrate Highload Blocks first (they may be referenced by IBlocks)
         $hlblockIds = $hlblockIds ?: $this->selectHlblocks();
