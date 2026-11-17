@@ -283,9 +283,11 @@ final class ParityAuditCommandTest extends SyntheticTestCase
             ->expectsOutput('Auditing 4 IBlocks against Laravel models…')
             ->expectsOutputToContain('Note::getAdministrationFields() threw: boom')
             ->expectsTable(['IBlock', 'Tabs in Bitrix', 'Tabs here', 'Field on the wrong tab', 'Order'], [
+                ['iblock_3', 'Main, Preview', '', 'sort', '0/2'],
                 ['demo_plain', 'Main', '', '—', '1/1'],
+                ['demo_notes', 'Main', '', '—', '—'],
             ])
-            ->expectsOutput('Forms fully matching Bitrix: 0 of 1')
+            ->expectsOutput('Forms fully matching Bitrix: 0 of 3')
             ->assertFailed();
 
         $report = json_decode((string) file_get_contents($path), true);
@@ -419,6 +421,11 @@ final class ParityAuditCommandTest extends SyntheticTestCase
             'ID' => 3, 'USER_ID' => null, 'CATEGORY' => 'form', 'NAME' => 'form_element_4', 'COMMON' => 'Y',
             'VALUE' => serialize(['tabs' => 'edit1--#--Main--,--NAME--#--Name--;--']),
         ]);
+        // A form for the model that describes its fields as arrays, one for the model that throws.
+        $this->bitrix()->table('b_user_option')->insert([
+            ['ID' => 4, 'USER_ID' => null, 'CATEGORY' => 'form', 'NAME' => 'form_element_3', 'COMMON' => 'Y', 'VALUE' => serialize(['tabs' => 'edit1--#--Main--,--NAME--#--Name--;--edit5--#--Preview--,--SORT--#--Sort--;--'])],
+            ['ID' => 5, 'USER_ID' => null, 'CATEGORY' => 'form', 'NAME' => 'form_element_6', 'COMMON' => 'Y', 'VALUE' => serialize(['tabs' => 'edit1--#--Main--,--NAME--#--Name--;--'])],
+        ]);
         Schema::create('plains', function (Blueprint $t): void {
             $t->id();
             $t->string('name');
@@ -446,6 +453,7 @@ final class ParityAuditCommandTest extends SyntheticTestCase
                         ['name' => 'section_id', 'type' => 'select'],
                         ['name' => 'canonical_url', 'type' => 'text'],
                         ['name' => 'sort', 'type' => 'number'],
+                        ['name' => 'name', 'type' => 'text', 'tab' => 'params'],
                     ];
                 }
             }

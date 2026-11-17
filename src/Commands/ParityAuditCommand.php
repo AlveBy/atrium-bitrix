@@ -381,18 +381,18 @@ class ParityAuditCommand extends Command
             $wrongTab = [];
             $sequence = [];
 
-            foreach ($modelClass::getAdministrationFields() as $field) {
-                $key = $this->layoutKey($layout, $field->getName());
+            foreach ($this->adminFields($modelClass) as $name => $field) {
+                $key = $this->layoutKey($layout, $name);
 
                 if ($key === null) {
                     continue;
                 }
 
                 $expectedTab = $layout->tabFor($key);
-                $actualTab = $field->getTab() ?: 'params';
+                $actualTab = empty($field['tab']) ? 'params' : $field['tab'];
 
                 if ($expectedTab !== null && $expectedTab !== $actualTab) {
-                    $wrongTab[] = $field->getName();
+                    $wrongTab[] = $name;
                 }
 
                 $sequence[] = $layout->positionOf($key);
