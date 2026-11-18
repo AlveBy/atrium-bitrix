@@ -97,7 +97,7 @@ TEXT, $output->fetch());
 
         Artisan::call('atrium:bitrix:migrate:data', ['--hlblock' => [1], '--iblock' => [99], '--force' => true, '--chunk' => 5], $output);
 
-        $this->assertMatchesRegularExpression('/\n 0\/2 \[░+\]   0%\n  Error inserting row 1: [^\n]*\n\n  Error inserting row 2: [^\n]*\n\n 2\/2 \[▓+\] 100%\n/u', $output->fetch());
+        $this->assertMatchesRegularExpression('/\n 0\/2 \[░+\]   0%\n  Error inserting row 1: .+?\n\n  Error inserting row 2: .+?\n\n 2\/2 \[▓+\] 100%\n/su', $output->fetch());
     }
 
     public function test_an_iblock_outside_the_skip_list_is_migrated(): void

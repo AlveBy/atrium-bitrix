@@ -176,8 +176,19 @@ final class MigrateAllCommandTest extends SyntheticTestCase
     #[DataProvider('steps')]
     public function test_each_step_starts_after_a_blank_line(string $heading, array $skipped): void
     {
+        // The data step has nothing to write into when the tables were not made.
+        $this->app->make(Kernel::class)->registerCommand(new class extends Command
+        {
+            protected $signature = 'atrium:bitrix:migrate:data {--connection=} {--iblock=*} {--hlblock=*} {--chunk=} {--skip-files} {--force}';
+
+            public function handle(): int
+            {
+                return self::SUCCESS;
+            }
+        });
+
         Artisan::call('atrium:bitrix:migrate', [
-            '--force' => true, '--skip-files' => true, '--iblock' => [1], '--hlblock' => [1],
+            '--force' => true, '--skip-files' => true, '--iblock' => [2], '--hlblock' => [1],
             ...array_fill_keys($skipped, true),
         ]);
 

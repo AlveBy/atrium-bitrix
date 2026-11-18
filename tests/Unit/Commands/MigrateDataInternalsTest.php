@@ -431,7 +431,9 @@ final class MigrateDataInternalsTest extends SyntheticTestCase
 
         $this->invoke($command, 'migrateHlblocks', [1]);
         $this->set($command, 'chunkSize', 3);
-        $this->invoke($command, 'migrateElements', $this->invoke($command, 'getIBlockAnalyzer')->analyze(2));
+        $iblock = $this->invoke($command, 'getIBlockAnalyzer')->analyze(2);
+        $this->invoke($command, 'migrateSections', $iblock);
+        $this->invoke($command, 'migrateElements', $iblock);
 
         $this->assertSame(['b_hlbd_brands:1:0', 'b_hlbd_brands:1:1', 'iblock2:3:0'], $connection->reads);
         $this->assertSame(2, DB::table('brands')->count());
