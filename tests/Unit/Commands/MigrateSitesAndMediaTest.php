@@ -14,6 +14,7 @@ use Atrium\Admin\Models\MediaItem;
 use Atrium\Admin\Models\Site;
 use Atrium\Bitrix\Tests\Fixtures\SyntheticBitrix;
 use Atrium\Bitrix\Tests\SyntheticTestCase;
+use Illuminate\Support\Facades\Artisan;
 
 /**
  * migrate:sites and migrate:medialibrary beyond the happy path of the full run.
@@ -144,6 +145,83 @@ final class MigrateSitesAndMediaTest extends SyntheticTestCase
         $this->assertSame('pdf', $manual->extension);
         $this->assertNull($manual->collection_id, 'its collection is inactive');
         $this->assertNull(MediaItem::query()->where('bitrix_id', 3)->first());
+    }
+
+    public function test_the_library_report_is_laid_out_with_a_blank_line_before_its_totals(): void
+    {
+        $this->seedLibrary();
+        Artisan::call('atrium:bitrix:migrate:medialibrary');
+
+        $expected = <<<'TXT'
+        Collections: 3
+        Items: 3
+        Skipped (file missing on disk): 1
+          /upload/medialibrary/zz/gone.jpg
+
+        In the library: 3 files, 3 collections
+
+        TXT;
+
+        $this->assertSame($expected, Artisan::output());
+    }
+
+    public function test_the_url_type_and_size_of_the_file_are_kept(): void
+    {
+        $this->seedLibrary();
+        $logo = '/upload/medialibrary/i5j/logo.png';
+
+        $this->artisan('atrium:bitrix:migrate:medialibrary')->assertSuccessful();
+
+        $item = MediaItem::query()->where('bitrix_id', 1)->sole();
+        $this->assertSame($logo, $item->url);
+        $this->assertSame('image/png', $item->mime_type);
+        $this->assertSame(10, $item->size);
+    }
+
+    public function test_an_extension_written_in_capitals_is_still_an_image_extension(): void
+    {
+        $this->bitrix()->table('b_file')->insert([
+            'ID' => 60, 'MODULE_ID' => 'fileman', 'SUBDIR' => 'medialibrary/up', 'FILE_NAME' => 'PHOTO.JPG',
+            'ORIGINAL_NAME' => 'PHOTO.JPG', 'CONTENT_TYPE' => 'image/jpeg', 'FILE_SIZE' => 5,
+        ]);
+        $this->bitrix()->table('b_medialib_item')->insert(['ID' => 60, 'NAME' => 'Photo', 'SOURCE_ID' => 60]);
+        mkdir($this->workDir.'/public/upload/medialibrary/up', 0777, true);
+        file_put_contents($this->workDir.'/public/upload/medialibrary/up/PHOTO.JPG', 'x');
+
+        $this->artisan('atrium:bitrix:migrate:medialibrary')->assertSuccessful();
+
+        $item = MediaItem::query()->where('bitrix_id', 60)->sole();
+        $this->assertSame('jpg', $item->extension);
+        $this->assertTrue($item->is_image);
+        $this->assertNull($item->collection_id, 'it is in no collection at all');
+    }
+
+    public function test_a_long_name_is_cut_to_255_characters_not_bytes(): void
+    {
+        $this->bitrix()->table('b_file')->insert([
+            'ID' => 61, 'MODULE_ID' => 'fileman', 'SUBDIR' => 'medialibrary/up', 'FILE_NAME' => 'long.png',
+            'ORIGINAL_NAME' => 'long.png', 'CONTENT_TYPE' => 'image/png', 'FILE_SIZE' => 5,
+        ]);
+        $this->bitrix()->table('b_medialib_item')->insert(['ID' => 61, 'NAME' => str_repeat('ж', 300), 'SOURCE_ID' => 61]);
+        mkdir($this->workDir.'/public/upload/medialibrary/up', 0777, true);
+        file_put_contents($this->workDir.'/public/upload/medialibrary/up/long.png', 'x');
+
+        $this->artisan('atrium:bitrix:migrate:medialibrary')->assertSuccessful();
+
+        $this->assertSame(str_repeat('ж', 255), MediaItem::query()->where('bitrix_id', 61)->sole()->name);
+    }
+
+    public function test_a_collection_without_a_name_is_kept_with_an_empty_one_and_a_zero_parent_is_no_parent(): void
+    {
+        $this->bitrix()->table('b_medialib_collection')->insert([
+            ['ID' => 0, 'NAME' => null, 'PARENT_ID' => 0],
+        ]);
+
+        $this->artisan('atrium:bitrix:migrate:medialibrary')->assertSuccessful();
+
+        $zero = MediaCollection::query()->where('bitrix_id', 0)->sole();
+        $this->assertSame('', $zero->name);
+        $this->assertNull($zero->parent_id);
     }
 
     public function test_a_dry_run_of_the_library_lists_it_and_writes_nothing(): void
