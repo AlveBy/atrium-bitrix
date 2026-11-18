@@ -102,6 +102,19 @@ final class MigrateSitesTest extends TestCase
         ], $this->siteStatuses());
     }
 
+    public function test_the_default_site_goes_first_whatever_its_sort_order(): void
+    {
+        DB::connection('bitrix')->table('b_lang')->where('LID', 's1')->update(['SORT' => 900]);
+
+        $this->artisan('atrium:bitrix:migrate:sites')
+            ->expectsTable(['Bitrix LID', 'Code', 'DIR', 'Folder', 'Domains'], [
+                ['s1', 'main', '/', '/', 'example.com, www.example.com'],
+                ['s2', 's2', '/en/', '/en/', 'example.com, www.example.com'],
+                ['s3', 's3', '/site2/', '/site2/', '—'],
+            ])
+            ->assertSuccessful();
+    }
+
     public function test_a_default_site_in_a_folder_stays_at_the_root(): void
     {
         DB::connection('bitrix')->table('b_lang')->where('LID', 's1')->update(['DIR' => '/ru/']);

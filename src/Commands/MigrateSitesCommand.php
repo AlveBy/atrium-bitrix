@@ -49,7 +49,7 @@ class MigrateSitesCommand extends AbstractBitrixCommand
 
         // The default site first: a site that loses the default flag to it
         // may then be put into a folder.
-        usort($sites, static fn (array $a, array $b): int => (int) $b['default'] <=> (int) $a['default']);
+        usort($sites, static fn (array $a, array $b): int => $b['default'] <=> $a['default']);
 
         $failed = false;
         $rows = [];
