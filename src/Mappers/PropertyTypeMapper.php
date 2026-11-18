@@ -102,13 +102,11 @@ class PropertyTypeMapper
         }
 
         return match ($field->userTypeId) {
-            'string' => ['type' => 'string', 'nullable' => true, 'length' => 255],
             'integer' => ['type' => 'integer', 'nullable' => true],
             'double' => ['type' => 'decimal', 'nullable' => true, 'precision' => 18, 'scale' => 4],
             'boolean' => ['type' => 'boolean', 'default' => false],
             'datetime' => ['type' => 'datetime', 'nullable' => true],
             'date' => ['type' => 'date', 'nullable' => true],
-            'file' => ['type' => 'string', 'nullable' => true, 'length' => 255],
             'enumeration' => ['type' => 'string', 'nullable' => true, 'length' => 100],
             'hlblock' => ['type' => 'foreignId', 'nullable' => true],
             'html' => ['type' => 'longText', 'nullable' => true],
@@ -138,7 +136,6 @@ class PropertyTypeMapper
             'N:SASDCheckbox', 'N:SASDCheckboxNum' => 'boolean',
             'S:map_yandex', 'S:map_google' => 'array',
             'S:video' => 'array',
-            'F' => $property->multiple ? 'array' : null,
             default => null,
         };
     }
@@ -165,7 +162,7 @@ class PropertyTypeMapper
     /**
      * Get JSON column definition for multiple properties
      */
-    protected function getJsonColumn(IBlockProperty $property): array
+    private function getJsonColumn(IBlockProperty $property): array
     {
         return [
             'type' => 'json',
