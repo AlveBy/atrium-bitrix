@@ -515,21 +515,22 @@ class ModelGenerator
         // If there is a Bitrix layout, take its tabs as they are: the set,
         // the captions (the element's own name rather than a generic "Params")
         // and the Sections tab, which used to be missing altogether.
+        $defaults = ['params', 'preview', 'detail', 'seo', 'sections'];
         $tabs = array_map(
             static fn (array $tab): array => ['name' => $tab['name'], 'label' => Labels::literal($tab['label'])],
             $this->layout?->tabs() ?? []
         );
 
+        // Without a layout: the four tabs of a plain form, Sections only when a field is put there.
         if ($tabs === []) {
             $tabs = array_map(
                 static fn (string $name): array => ['name' => $name, 'label' => Labels::tab($name)],
-                ['params', 'preview', 'detail', 'seo']
+                array_slice($defaults, 0, 4)
             );
         }
 
         // A tab that holds fields must be in the list, otherwise they are not
         // rendered. Add the missing ones in canonical order.
-        $defaults = ['params', 'preview', 'detail', 'seo', 'sections'];
         $present = array_column($tabs, 'name');
 
         foreach ($defaults as $name) {
@@ -647,7 +648,7 @@ class ModelGenerator
             ]]);
         }
 
-        $this->usedTabs = array_values(array_unique(array_column($entries, 'tab')));
+        $this->usedTabs = array_column($entries, 'tab');
 
         $lines = ['return ['];
         $currentTab = null;
@@ -824,7 +825,7 @@ class ModelGenerator
         // Add options for SelectField/MultiSelectField only (not CheckboxField)
         if (! empty($config['options']) && in_array($class, ['SelectField', 'MultiSelectField'])) {
             $optionsStr = var_export($config['options'], true);
-            $optionsStr = str_replace(["\n", '  '], ['', ''], $optionsStr);
+            $optionsStr = str_replace(["\n", '  '], '', $optionsStr);
             $line .= "->options({$optionsStr})";
         }
 
@@ -842,17 +843,13 @@ class ModelGenerator
      */
     private function determineFieldTab(string $fieldName): string
     {
-        $previewFields = ['preview_text', 'preview_picture'];
-        $detailFields = ['detail_text', 'detail_picture', 'photos', 'documents', 'big_photos', 'gallery', 'planirovka'];
-        $seoFields = ['meta_title', 'meta_description', 'meta_keywords', 'seo_title', 'seo_description'];
-
-        if (in_array($fieldName, $previewFields) || str_starts_with($fieldName, 'preview_')) {
+        if (str_starts_with($fieldName, 'preview_')) {
             return 'preview';
         }
-        if (in_array($fieldName, $detailFields) || str_starts_with($fieldName, 'detail_')) {
+        if (in_array($fieldName, ['photos', 'documents', 'big_photos', 'gallery', 'planirovka'], true) || str_starts_with($fieldName, 'detail_')) {
             return 'detail';
         }
-        if (in_array($fieldName, $seoFields) || str_starts_with($fieldName, 'meta_') || str_starts_with($fieldName, 'seo_')) {
+        if (str_starts_with($fieldName, 'meta_') || str_starts_with($fieldName, 'seo_')) {
             return 'seo';
         }
 
