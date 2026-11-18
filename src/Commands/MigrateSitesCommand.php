@@ -65,10 +65,10 @@ class MigrateSitesCommand extends AbstractBitrixCommand
                     $this->warn("The default site {$site['lid']} sits in {$site['dir']} in Bitrix; in Atrium the default site opens at the root.");
                 }
 
+                // (The Site model keeps a default site active and a default
+                // one there.)
                 unset($attributes['code']);
                 $attributes['folder'] = null;
-                $attributes['is_default'] = true;
-                $attributes['active'] = true;
 
                 if ($attributes['domains'] === []) {
                     unset($attributes['domains']);
