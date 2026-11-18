@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace Atrium\Bitrix\Tests\Unit\Commands;
 
 use Atrium\Bitrix\Tests\SyntheticTestCase;
+use Illuminate\Support\Facades\Artisan;
 
 /**
  * generate:migrations and generate:models: what they pick, what they write,
@@ -25,6 +26,23 @@ final class GenerateCommandsTest extends SyntheticTestCase
         return array_map(
             static fn (string $file): string => (string) preg_replace('/^\d{4}_\d{2}_\d{2}_\d{6}_\d{4}_/', '', $file),
             $this->generatedFiles('migrations'),
+        );
+    }
+
+    /**
+     * What a run prints, with the scratch folder and the file timestamps named
+     * by placeholders so the whole transcript can be compared.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    private function transcript(string $command, array $options): string
+    {
+        Artisan::call($command, $options);
+
+        return (string) preg_replace(
+            '/\d{4}_\d{2}_\d{2}_\d{6}_/',
+            'STAMP_',
+            str_replace($this->workDir, 'WORK', Artisan::output()),
         );
     }
 
@@ -77,6 +95,103 @@ final class GenerateCommandsTest extends SyntheticTestCase
             'create_news_link_goods_table.php',
             'create_products_related_table.php',
         ], $this->migrations());
+    }
+
+    public function test_the_dry_run_report_of_migrations_is_laid_out_with_blank_lines_between_its_parts(): void
+    {
+        $expected = <<<'TXT'
+        Bitrix Migration Generator
+        ==========================
+
+        Generating linked Highload Block migrations (referenced by IBlocks)...
+
+        Highload Block: Brands
+          Would create [main]: STAMP_0001_create_brands_table.php
+
+        Generating IBlock migrations...
+
+        IBlock: News (demo_news)
+          Would create [elements]: STAMP_0002_create_news_table.php
+
+        IBlock: Products (demo_products)
+          Would create [sections]: STAMP_0003_create_product_sections_table.php
+          Would create [elements]: STAMP_0004_create_products_table.php
+
+        Link tables
+          Would create [demo_news.pivot_link_goods]: STAMP_0005_create_news_link_goods_table.php
+          Would create [demo_products.pivot_related]: STAMP_0006_create_products_related_table.php
+        Generating Highload Block migrations...
+          Skipping Brands (already generated as linked directory)
+
+        Migration generation complete!
+
+        TXT;
+
+        $this->assertSame($expected, $this->transcript('atrium:bitrix:generate:migrations', [
+            '--dry-run' => true, '--iblock' => [1, 2], '--hlblock' => [1],
+        ]));
+    }
+
+    public function test_the_written_report_of_migrations_ends_with_the_hint_to_migrate(): void
+    {
+        $expected = <<<'TXT'
+        Bitrix Migration Generator
+        ==========================
+
+        Generating IBlock migrations...
+
+        IBlock: News (demo_news)
+          Created [elements]: STAMP_0001_create_news_table.php
+
+        Link tables
+          Created [demo_news.pivot_link_goods]: STAMP_0002_create_news_link_goods_table.php
+        Generating Highload Block migrations...
+        Highload Block 99 not found
+
+        Migration generation complete!
+
+        Run "php artisan migrate" to apply the migrations.
+
+        TXT;
+
+        $this->assertSame($expected, $this->transcript('atrium:bitrix:generate:migrations', [
+            '--force' => true, '--iblock' => [1], '--hlblock' => [99],
+        ]));
+    }
+
+    public function test_a_verbose_dry_run_sets_the_code_of_each_migration_apart_by_blank_lines(): void
+    {
+        $out = $this->transcript('atrium:bitrix:generate:migrations', [
+            '--dry-run' => true, '-v' => true, '--iblock' => [1], '--hlblock' => [99],
+        ]);
+
+        $this->assertStringContainsString("  Would create [elements]: STAMP_0001_create_news_table.php\n\n<?php\n\nuse Illuminate", $out);
+        $this->assertStringContainsString("        Schema::dropIfExists('news');\n    }\n};\n\n\nLink tables\n", $out);
+    }
+
+    public function test_a_block_that_is_missing_or_skipped_does_not_stop_the_ones_after_it(): void
+    {
+        config(['atrium-bitrix.skip_iblocks' => [2]]);
+
+        $this->artisan('atrium:bitrix:generate:migrations', ['--dry-run' => true, '--iblock' => [99, 2, 1], '--hlblock' => [98, 1]])
+            ->expectsOutput('IBlock 99 not found')
+            ->expectsOutput('Skipping IBlock 2 (in skip list)')
+            ->expectsOutput('IBlock: News (demo_news)')
+            ->expectsOutput('Highload Block 98 not found')
+            ->expectsOutput('Highload Block: Brands')
+            ->assertSuccessful();
+    }
+
+    public function test_a_directory_named_with_another_prefix_is_found_among_the_blocks_read_up_front(): void
+    {
+        $this->bitrix()->table('b_iblock_property')->where('CODE', 'BRAND')->update([
+            'USER_TYPE_SETTINGS' => serialize(['size' => 1, 'TABLE_NAME' => 'theme_hlbd_brands']),
+        ]);
+
+        $this->artisan('atrium:bitrix:generate:migrations', ['--dry-run' => true, '--iblock' => [2], '--hlblock' => [99]])
+            ->expectsOutput('Generating linked Highload Block migrations (referenced by IBlocks)...')
+            ->expectsOutput('Highload Block: Brands')
+            ->assertSuccessful();
     }
 
     public function test_blocks_asked_for_by_id_are_the_only_ones_generated(): void

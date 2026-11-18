@@ -75,7 +75,7 @@ class GenerateMigrationsCommand extends AbstractBitrixCommand
     /**
      * Initialize generator
      */
-    protected function initializeGenerator(): void
+    private function initializeGenerator(): void
     {
         $naming = $this->getNaming();
         $typeMapper = new PropertyTypeMapper;
@@ -86,7 +86,7 @@ class GenerateMigrationsCommand extends AbstractBitrixCommand
     /**
      * Generate migrations for IBlocks
      */
-    protected function generateIBlockMigrations(array $iblockIds, bool $dryRun): void
+    private function generateIBlockMigrations(array $iblockIds, bool $dryRun): void
     {
         $analyzer = $this->getIBlockAnalyzer();
 
@@ -150,7 +150,7 @@ class GenerateMigrationsCommand extends AbstractBitrixCommand
     /**
      * Generate migration for single IBlock
      */
-    protected function generateIBlockMigration($iblock, bool $dryRun): void
+    private function generateIBlockMigration($iblock, bool $dryRun): void
     {
         $naming = $this->getNaming();
 
@@ -167,7 +167,7 @@ class GenerateMigrationsCommand extends AbstractBitrixCommand
     /**
      * Generate migrations for Highload Blocks
      */
-    protected function generateHlblockMigrations(array $hlblockIds, bool $dryRun): void
+    private function generateHlblockMigrations(array $hlblockIds, bool $dryRun): void
     {
         $this->info('Generating Highload Block migrations...');
 
@@ -188,7 +188,7 @@ class GenerateMigrationsCommand extends AbstractBitrixCommand
     /**
      * Generate migration for single Highload Block
      */
-    protected function generateHlblockMigration($hlblock, bool $dryRun): void
+    private function generateHlblockMigration($hlblock, bool $dryRun): void
     {
         // Skip if already generated (as linked directory from IBlock)
         if (in_array($hlblock->id, $this->generatedHlblockIds, true)) {
@@ -215,7 +215,7 @@ class GenerateMigrationsCommand extends AbstractBitrixCommand
     /**
      * Output migration (write or display)
      */
-    protected function outputMigration(string $type, string $filename, string $content, bool $dryRun): void
+    private function outputMigration(string $type, string $filename, string $content, bool $dryRun): void
     {
         $path = $this->generator->getMigrationsPath().'/'.$filename;
 
@@ -254,7 +254,7 @@ class GenerateMigrationsCommand extends AbstractBitrixCommand
     /**
      * Extract table name from migration filename
      */
-    protected function extractTableName(string $filename): string
+    private function extractTableName(string $filename): string
     {
         // Remove timestamp, sequence number and extension
         $name = preg_replace('/^\d{4}_\d{2}_\d{2}_\d{6}_\d{4}_/', '', $filename);
