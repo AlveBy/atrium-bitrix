@@ -104,7 +104,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
     /**
      * Format IBlock row for table
      */
-    protected function formatIBlockRow(IBlock $iblock): array
+    private function formatIBlockRow(IBlock $iblock): array
     {
         $connection = $this->getBitrixConnection();
 
@@ -125,7 +125,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
     /**
      * Count relations in IBlock
      */
-    protected function countRelations(IBlock $iblock): int
+    private function countRelations(IBlock $iblock): int
     {
         $count = 0;
         foreach ($iblock->properties as $property) {
@@ -140,7 +140,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
     /**
      * Show property details for IBlock
      */
-    protected function showPropertyDetails(IBlock $iblock): void
+    private function showPropertyDetails(IBlock $iblock): void
     {
         $this->newLine();
         $this->info("Properties for IBlock: {$iblock->name} ({$iblock->code})");
@@ -172,7 +172,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
     /**
      * Get property relation info
      */
-    protected function getPropertyRelationInfo($property): string
+    private function getPropertyRelationInfo($property): string
     {
         if ($property->isElementLink()) {
             return "E:{$property->linkIblockId}";
@@ -248,7 +248,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
     /**
      * Show Highload Block field details
      */
-    protected function showHlblockFieldDetails($hlblock): void
+    private function showHlblockFieldDetails($hlblock): void
     {
         $this->newLine();
         $this->info("Fields for Highload Block: {$hlblock->name}");
@@ -278,7 +278,7 @@ class AnalyzeBitrixCommand extends AbstractBitrixCommand
     /**
      * Output analysis as JSON
      */
-    protected function outputJson(): void
+    private function outputJson(): void
     {
         $iblockAnalyzer = $this->getIBlockAnalyzer();
         $hlblockAnalyzer = $this->getHlblockAnalyzer();
