@@ -389,4 +389,153 @@ final class ModelGeneratorTest extends TestCase
         );
         $this->assertStringContainsString("// Sections\n            TextField::make('extra')->tab('sections'),", $model);
     }
+
+    public function test_the_file_is_strict_and_imports_everything_the_model_names(): void
+    {
+        $model = $this->model(self::withSections(self::block(self::property('PHOTO', 'F'))));
+
+        $this->assertStringStartsWith(<<<'PHP'
+            <?php
+
+            declare(strict_types=1);
+
+            namespace App\Models;
+
+            use Atrium\Admin\Columns\BooleanColumn;
+            use Atrium\Admin\Columns\DateColumn;
+            use Atrium\Admin\Columns\ImageColumn;
+            use Atrium\Admin\Columns\TextColumn;
+            use Atrium\Admin\Contracts\Administrable;
+            use Atrium\Admin\Fields\BelongsToField;
+            use Atrium\Admin\Fields\BelongsToManyField;
+            use Atrium\Admin\Fields\CheckboxField;
+            use Atrium\Admin\Fields\ContentField;
+            use Atrium\Admin\Fields\DateField;
+            use Atrium\Admin\Fields\DateTimeField;
+            use Atrium\Admin\Fields\GalleryField;
+            use Atrium\Admin\Fields\ImageField;
+            use Atrium\Admin\Fields\MapField;
+            use Atrium\Admin\Fields\MultiSelectField;
+            use Atrium\Admin\Fields\NumberField;
+            use Atrium\Admin\Fields\RepeatableField;
+            use Atrium\Admin\Fields\SelectField;
+            use Atrium\Admin\Fields\SlugField;
+            use Atrium\Admin\Fields\TextField;
+            use Atrium\Admin\Fields\TextareaField;
+            use Atrium\Admin\Fields\TreeSelectField;
+            use Atrium\Admin\Fields\WysiwygField;
+            use Atrium\Admin\Traits\HasAdminFiles;
+            use Atrium\Admin\Traits\HasAdminSeo;
+            use Atrium\Admin\Traits\HasAdminSlug;
+            use Atrium\Admin\Traits\HasAdminTabs;
+            use Atrium\Admin\Traits\InteractsWithAdmin;
+            use Illuminate\Database\Eloquent\Builder;
+            use Illuminate\Database\Eloquent\Model;
+            use Illuminate\Database\Eloquent\Relations\BelongsTo;
+            use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+            use Illuminate\Database\Eloquent\Relations\HasMany;
+
+            class Product extends Model implements Administrable
+            {
+                use InteractsWithAdmin;
+                use HasAdminSlug;
+                use HasAdminSeo;
+                use HasAdminTabs;
+                use HasAdminFiles;
+
+                /** Base path for URLs (as in Bitrix IBlock) */
+                protected static string $urlPath = 'products';
+                protected $table = 'products';
+
+                protected $fillable = [
+                    'name',
+                    'code',
+            PHP."\n", $model);
+    }
+
+    public function test_the_model_tells_the_panel_it_has_tabs_and_scopes_that_take_a_query(): void
+    {
+        $model = $this->model(self::block());
+
+        $this->assertStringContainsString("public static function usesTabs(): bool\n    {\n        return true;\n    }", $model);
+        $this->assertStringContainsString("public function scopeActive(\$query): Builder\n    {\n        return \$query->where('active', true);", $model);
+        $this->assertStringContainsString("public function scopeSorted(\$query): Builder\n    {\n        return \$query->orderBy('sort')", $model);
+        $this->assertStringContainsString("public function scopeActivePeriod(\$query): Builder\n    {\n        return \$query\n", $model);
+    }
+
+    public function test_a_property_that_is_not_fillable_or_not_castable_does_not_stop_the_ones_after_it(): void
+    {
+        $model = $this->model(self::block(
+            self::property('SOME', 'E', null, true, [], 'news'),
+            self::property('NAME', 'S'),
+            self::property('SORT', 'N'),
+            self::property('WEIGHT', 'N'),
+            self::property('ARTICLE'),
+        ));
+
+        $this->assertStringContainsString("        'detail_picture',\n        'weight',\n        'article',\n    ];", $model);
+        $this->assertStringContainsString("        'sort' => 'integer',\n        'weight' => 'decimal:4',\n    ];", $model);
+        $this->assertStringContainsString("TextField::make('article')->label('Field ARTICLE')->tab('params'),", $model);
+        $this->assertStringContainsString("NumberField::make('weight')->label('Field WEIGHT')->tab('params'),", $model);
+    }
+
+    public function test_without_a_saved_form_the_tabs_are_the_four_plain_ones_whatever_the_fields(): void
+    {
+        $model = $this->model(self::block(self::property('ARTICLE')));
+
+        $this->assertStringContainsString(
+            "return [\n            ['name' => 'params', 'label' => __('atrium::fields.tabs.main')],\n"
+            ."            ['name' => 'preview', 'label' => __('atrium::fields.tabs.preview')],\n"
+            ."            ['name' => 'detail', 'label' => __('atrium::fields.tabs.detail')],\n"
+            ."            ['name' => 'seo', 'label' => __('atrium::fields.tabs.seo')],\n"
+            .'        ];',
+            $model,
+        );
+    }
+
+    public function test_the_column_of_a_base_field_is_drawn_to_fit_it(): void
+    {
+        config(['atrium-bitrix.extra_list_columns' => ['products' => ['detail_picture', 'updated_at', 'active_to', 'active']]]);
+
+        $model = $this->model(self::block());
+
+        $this->assertStringContainsString("            ImageColumn::make('detail_picture')->label(__('atrium::fields.standard.detail_picture')),\n", $model);
+        $this->assertStringContainsString("            DateColumn::make('updated_at')->label(__('atrium::fields.standard.updated_at'))->sortable(),\n", $model);
+        $this->assertStringContainsString("            DateColumn::make('active_to')->label(__('atrium::fields.standard.active_to'))->sortable(),\n", $model);
+    }
+
+    public function test_a_field_the_project_puts_after_another_leaves_the_rest_where_it_was(): void
+    {
+        config(['atrium-bitrix.extra_fields' => ['products' => [
+            'featured' => ['field' => "CheckboxField::make('featured')->label('Featured')", 'after' => 'sort'],
+        ]]]);
+
+        $model = $this->model(self::block());
+
+        $this->assertStringContainsString(
+            "NumberField::make('sort')->label(__('atrium::fields.standard.sort'))->default(500)->tab('params'),\n"
+            ."            CheckboxField::make('featured')->label('Featured')->tab('params'),\n\n"
+            ."            // Preview\n"
+            ."            ImageField::make('preview_picture')->label(__('atrium::fields.standard.preview_picture'))->tab('preview'),\n",
+            $model,
+        );
+    }
+
+    public function test_a_field_the_project_puts_after_a_name_taken_twice_follows_the_first(): void
+    {
+        config(['atrium-bitrix.extra_fields' => ['products' => [
+            'featured' => ['field' => "CheckboxField::make('featured')", 'after' => 'twin'],
+        ]]]);
+
+        $model = $this->model(self::block(self::property('TWIN'), self::property('TWIN', 'S', null, false, ['NAME' => 'Second'])));
+
+        $this->assertStringContainsString("TextField::make('twin')->label('Field TWIN')->tab('params'),\n            CheckboxField::make('featured')->tab('params'),\n            TextField::make('twin')->label('Second')", $model);
+    }
+
+    public function test_the_options_of_a_list_are_written_on_one_line(): void
+    {
+        $model = $this->model(self::block(self::withEnums(self::property('SIZE', 'L'), ['Small', 'Large'])));
+
+        $this->assertStringContainsString("SelectField::make('size')->label('Field SIZE')->options(array (0 => array ('value' => '100','label' => 'Small',),1 => array ('value' => '101','label' => 'Large',),))->tab('params'),", $model);
+    }
 }

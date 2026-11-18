@@ -104,4 +104,12 @@ final class ModelGeneratorLayoutTest extends SyntheticTestCase
         $this->assertSame(1, substr_count($model, "DateColumn::make('active_from')"));
         $this->assertStringContainsString("TextColumn::make('name')->label(__('atrium::fields.standard.name'))->sortable()->searchable(),\n            DateColumn::make('active_from')->label(__('atrium::fields.standard.active_from'))->sortable(),\n            TextColumn::make('price')->label('Price')->sortable(),\n            TextColumn::make('brand')->label('Brand')->sortable(),\n        ];", $model);
     }
+
+    public function test_the_create_button_is_called_what_the_iblock_messages_say(): void
+    {
+        $this->assertStringContainsString(
+            "public static function getAdminCreateLabel(): string\n    {\n        return 'Add a product';\n    }",
+            $this->products(),
+        );
+    }
 }
