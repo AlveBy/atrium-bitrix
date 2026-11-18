@@ -256,12 +256,7 @@ class ReferenceModelGenerator
         $lines = ['return ['];
         $lines[] = "    TextColumn::make('id')->label('ID')->sortable(),";
 
-        $columnCount = 0;
-        foreach ($hlblock->fields as $field) {
-            if ($columnCount >= 4) {
-                break;
-            }
-
+        foreach (array_slice($hlblock->fields, 0, 4) as $field) {
             $columnConfig = $this->fieldMapper->hlFieldToListColumn($field);
             $class = $columnConfig['class'];
             $name = $columnConfig['name'];
@@ -275,7 +270,6 @@ class ReferenceModelGenerator
             }
 
             $lines[] = "{$line},";
-            $columnCount++;
         }
 
         $lines[] = '];';
