@@ -218,8 +218,9 @@ class ParityAuditCommand extends Command
     private function propertyCodes(int $iblockId): array
     {
         $codes = [];
-        foreach ($this->bitrix->getIBlockProperties($iblockId) as $property) {
-            $codes[$property['ID']] = (string) $property['CODE'];
+        foreach ($this->bitrix->getIBlockProperties($iblockId) as $raw) {
+            $property = IBlockProperty::fromArray($raw);
+            $codes[$property->id] = $property->code;
         }
 
         return $codes;
