@@ -1,0 +1,196 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Atrium\Bitrix\Tests\Generated;
+
+use Atrium\Admin\Columns\BooleanColumn;
+use Atrium\Admin\Columns\TextColumn;
+use Atrium\Admin\Contracts\Administrable;
+use Atrium\Admin\Fields\CheckboxField;
+use Atrium\Admin\Fields\ContentField;
+use Atrium\Admin\Fields\ImageField;
+use Atrium\Admin\Fields\NumberField;
+use Atrium\Admin\Fields\SelectField;
+use Atrium\Admin\Fields\SlugField;
+use Atrium\Admin\Fields\TextField;
+use Atrium\Admin\Fields\TextareaField;
+use Atrium\Admin\Fields\TreeSelectField;
+use Atrium\Admin\Traits\HasAdminSeo;
+use Atrium\Admin\Traits\HasAdminSlug;
+use Atrium\Admin\Traits\HasAdminTabs;
+use Atrium\Admin\Traits\InteractsWithAdmin;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
+
+class ProductSection extends Model implements Administrable
+{
+    use InteractsWithAdmin;
+    use HasAdminSlug;
+    use HasAdminSeo;
+    use HasAdminTabs;
+
+    protected $table = 'product_sections';
+
+    protected $fillable = [
+        'parent_id',
+        'name',
+        'code',
+        'sort',
+        'active',
+        'description',
+        'picture',
+        'detail_picture',
+        'depth',
+        'left_margin',
+        'right_margin',
+        'note',
+        'view',
+        'note',
+        'after_note',
+    ];
+
+    protected $casts = [
+        'active' => 'boolean',
+        'sort' => 'integer',
+        'depth' => 'integer',
+        'left_margin' => 'integer',
+        'right_margin' => 'integer',
+        'after_note' => 'string',
+    ];
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id')->orderBy('sort')->orderBy('id');
+    }
+
+    public function elements(): HasMany
+    {
+        return $this->hasMany(Product::class, 'section_id');
+    }
+
+    public function getAncestorsAttribute(): Collection
+    {
+        $ancestors = collect();
+        $parent = $this->parent;
+
+        while ($parent) {
+            $ancestors->prepend($parent);
+            $parent = $parent->parent;
+        }
+
+        return $ancestors;
+    }
+
+    public function getDescendantsAttribute(): Collection
+    {
+        return static::where('left_margin', '>', $this->left_margin)
+            ->where('right_margin', '<', $this->right_margin)
+            ->orderBy('left_margin')
+            ->get();
+    }
+
+    public function scopeRoots($query): Builder
+    {
+        return $query->whereNull('parent_id');
+    }
+
+    public function scopeActive($query): Builder
+    {
+        return $query->where('active', true);
+    }
+
+    public function scopeSorted($query): Builder
+    {
+        return $query->orderBy('left_margin');
+    }
+
+    public static function getTree(): Collection
+    {
+        return static::roots()
+            ->with('children')
+            ->sorted()
+            ->get();
+    }
+
+    /**
+     * Get the full section path through all ancestors
+     */
+    public function getPathSlug(): string
+    {
+        $parts = $this->ancestors->pluck('code')->toArray();
+        $parts[] = $this->code;
+
+        return implode('/', array_filter($parts));
+    }
+
+    /**
+     * Get the parent path (for HasAdminSlug)
+     */
+    public function getParentPath(): string
+    {
+        return $this->ancestors->pluck('code')->implode('/');
+    }
+
+    public static function usesTabs(): bool
+    {
+        return true;
+    }
+
+    public static function getAdminTabs(): array
+    {
+        return [
+            ['name' => 'params', 'label' => __('atrium::fields.tabs.main')],
+            ['name' => 'content', 'label' => __('atrium::fields.tabs.description')],
+            ['name' => 'seo', 'label' => __('atrium::fields.tabs.seo')],
+        ];
+    }
+
+    public static function getAdminLabel(): string
+    {
+        return 'Products: ' . __('atrium::fields.tabs.sections');
+    }
+
+    public static function getAdministrationFields(): array
+    {
+        return [
+            // Parameters
+            TreeSelectField::make('parent_id')->label(__('atrium::fields.standard.parent_section'))->model(self::class)->tab('params'),
+            TextField::make('name')->label(__('atrium::fields.standard.name'))->required()->tab('params'),
+            SlugField::make('code')->label(__('atrium::fields.standard.code'))->from('name')->tab('params'),
+            CheckboxField::make('active')->label(__('atrium::fields.standard.active'))->default(true)->tab('params'),
+            NumberField::make('sort')->label(__('atrium::fields.standard.sort'))->default(500)->tab('params'),
+
+            // Description
+            ContentField::make('description')->label(__('atrium::fields.standard.description'))->tab('content'),
+            ImageField::make('picture')->label(__('atrium::fields.standard.picture'))->tab('content'),
+            ImageField::make('detail_picture')->label(__('atrium::fields.standard.detail_picture'))->tab('content'),
+
+            // Parameters
+            TextField::make('note')->label('Editor\'s note')->tab('params'),
+            TextField::make('after_note')->tab('params'),
+            SelectField::make('view')->label('UF_VIEW')->options([['value' => 'tiles', 'label' => 'Editor\'s tiles'], ['value' => 'list', 'label' => 'List']])->tab('params'),
+
+            // Description
+            CheckboxField::make('note')->tab('content'),
+        ];
+    }
+
+    public static function getAdministrationListColumns(): array
+    {
+        return [
+            TextColumn::make('id')->label('ID')->sortable(),
+            TextColumn::make('name')->label(__('atrium::fields.standard.name'))->sortable()->searchable(),
+            BooleanColumn::make('active')->label(__('atrium::fields.standard.active')),
+            TextColumn::make('sort')->label(__('atrium::fields.standard.sort'))->sortable(),
+        ];
+    }
+}

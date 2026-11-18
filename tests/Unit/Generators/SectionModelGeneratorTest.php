@@ -56,4 +56,18 @@ final class SectionModelGeneratorTest extends SyntheticTestCase
         $this->assertStringContainsString("TextField::make('name')->label(__('atrium::fields.standard.name'))->required()->tab('params'),\n            TextField::make('subtitle')->tab('params'),\n            SlugField::make('code')", $model);
         $this->assertStringContainsString("->tab('content'),\n            ImageField::make('banner')->tab('content'),\n\n            // Parameters\n            TextField::make('footer')->tab('params'),\n        ];", $model);
     }
+
+    public function test_the_whole_section_model_is_written_as_the_golden_file_says(): void
+    {
+        $this->bitrix()->table('b_user_field_lang')->where('USER_FIELD_ID', 1)->update(['EDIT_FORM_LABEL' => "Editor's note"]);
+        $this->bitrix()->table('b_user_field_enum')->where('ID', 1)->update(['VALUE' => "Editor's tiles"]);
+        config(['atrium-bitrix.extra_fields' => ['product_sections' => [
+            'note' => ['field' => "CheckboxField::make('note')", 'tab' => 'content'],
+            'after_note' => ['field' => "TextField::make('after_note')", 'after' => 'note', 'cast' => 'string'],
+        ]]]);
+
+        $model = (new SectionModelGenerator(new NamingConvention, $this->bitrix()))->generate(self::products());
+
+        $this->assertStringEqualsFile(__DIR__.'/../../Fixtures/golden/ProductSection.txt', $model);
+    }
 }
