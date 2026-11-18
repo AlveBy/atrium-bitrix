@@ -14,6 +14,7 @@ use Atrium\Bitrix\Schema\IBlock;
 use Atrium\Bitrix\Schema\IBlockProperty;
 use Atrium\Bitrix\Support\SectionUserFields;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
@@ -66,7 +67,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
 
         $this->jsonColumnsCache = [];
         $this->chunkSize = (int) $this->option('chunk');
-        $this->skipFiles = (bool) $this->option('skip-files');
+        $this->skipFiles = $this->option('skip-files') === true;
 
         $iblockIds = $this->idsOption('iblock');
         $hlblockIds = $this->idsOption('hlblock');
@@ -92,7 +93,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
     /**
      * Migrate Highload Blocks data
      */
-    protected function migrateHlblocks(array $hlblockIds): void
+    private function migrateHlblocks(array $hlblockIds): void
     {
         $this->info('Migrating Highload Block data...');
 
@@ -123,33 +124,22 @@ class MigrateDataCommand extends AbstractBitrixCommand
 
             $this->info("  Records to migrate: {$totalCount}");
 
-            $bar = $this->output->createProgressBar($totalCount);
-            $bar->start();
+            $rows = $this->chunked($totalCount, fn (int $offset): array => $connection->getHighloadBlockData($hlblock->tableName, $this->chunkSize, $offset));
 
-            $offset = 0;
-            while ($offset < $totalCount) {
-                $rows = $connection->getHighloadBlockData($hlblock->tableName, $this->chunkSize, $offset);
+            foreach ($this->output->createProgressBar()->iterate($rows, $totalCount) as $row) {
+                $data = $this->transformHlblockRow($row, $hlblock);
+                $data['created_at'] = now();
+                $data['updated_at'] = now();
+                $data = $this->prepareDataForInsert($data, $laravelTable);
 
-                foreach ($rows as $row) {
-                    $data = $this->transformHlblockRow($row, $hlblock);
-                    $data['created_at'] = now();
-                    $data['updated_at'] = now();
-                    $data = $this->prepareDataForInsert($data, $laravelTable);
-
-                    try {
-                        DB::table($laravelTable)->insert($data);
-                    } catch (\Exception $e) {
-                        $this->newLine();
-                        $this->error("  Error inserting row {$row['ID']}: {$e->getMessage()}");
-                    }
-
-                    $bar->advance();
+                try {
+                    DB::table($laravelTable)->insert($data);
+                } catch (\Exception $e) {
+                    $this->newLine();
+                    $this->error("  Error inserting row {$row['ID']}: {$e->getMessage()}");
                 }
-
-                $offset += $this->chunkSize;
             }
 
-            $bar->finish();
             $this->newLine();
         }
     }
@@ -157,7 +147,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
     /**
      * Transform Highload Block row
      */
-    protected function transformHlblockRow(array $row, $hlblock): array
+    private function transformHlblockRow(array $row, $hlblock): array
     {
         $naming = $this->getNaming();
         $data = ['id' => $row['ID']];
@@ -194,7 +184,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
     /**
      * Migrate IBlocks data
      */
-    protected function migrateIBlocks(array $iblockIds): void
+    private function migrateIBlocks(array $iblockIds): void
     {
         $this->info('Migrating IBlock data...');
 
@@ -263,7 +253,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
     /**
      * Migrate IBlock sections
      */
-    protected function migrateSections(IBlock $iblock): void
+    private function migrateSections(IBlock $iblock): void
     {
         $connection = $this->getBitrixConnection();
         $naming = $this->getNaming();
@@ -290,16 +280,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
 
         $this->info('  Sections to migrate: '.count($sections));
 
-        // Build parent mapping
-        $parentMap = [];
-        foreach ($sections as $section) {
-            $parentMap[$section['ID']] = $section['IBLOCK_SECTION_ID'];
-        }
-
-        $bar = $this->output->createProgressBar(count($sections));
-        $bar->start();
-
-        foreach ($sections as $section) {
+        foreach ($this->output->createProgressBar()->iterate($sections) as $section) {
             $data = [
                 'id' => $section['ID'],
                 'bitrix_id' => $section['ID'],
@@ -316,7 +297,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
                 'updated_at' => now(),
             ];
 
-            foreach ($userFieldValues[(int) $section['ID']] ?? [] as $column => $value) {
+            foreach ($userFieldValues[$section['ID']] ?? [] as $column => $value) {
                 // The column exists only if the migrations were regenerated;
                 // on an old schema skip it silently instead of failing the transfer.
                 if (in_array($column, $sectionColumns, true)) {
@@ -342,18 +323,15 @@ class MigrateDataCommand extends AbstractBitrixCommand
                 $this->newLine();
                 $this->error("  Error inserting section {$section['ID']}: {$e->getMessage()}");
             }
-
-            $bar->advance();
         }
 
-        $bar->finish();
         $this->newLine();
     }
 
     /**
      * Migrate IBlock elements
      */
-    protected function migrateElements(IBlock $iblock): void
+    private function migrateElements(IBlock $iblock): void
     {
         $connection = $this->getBitrixConnection();
         $naming = $this->getNaming();
@@ -373,36 +351,36 @@ class MigrateDataCommand extends AbstractBitrixCommand
 
         $this->info("  Elements to migrate: {$totalCount}");
 
-        $bar = $this->output->createProgressBar($totalCount);
-        $bar->start();
+        $elements = $this->chunked($totalCount, fn (int $offset): array => $connection->getIBlockElements($iblock->id, $this->chunkSize, $offset));
 
-        $offset = 0;
-        while ($offset < $totalCount) {
-            $elements = $connection->getIBlockElements($iblock->id, $this->chunkSize, $offset);
+        foreach ($this->output->createProgressBar()->iterate($elements, $totalCount) as $element) {
+            $data = $this->transformElement($element, $iblock);
+            $data = $this->prepareDataForInsert($data, $laravelTable);
 
-            foreach ($elements as $element) {
-                $data = $this->transformElement($element, $iblock);
-                $data = $this->prepareDataForInsert($data, $laravelTable);
+            try {
+                DB::table($laravelTable)->insert($data);
 
-                try {
-                    DB::table($laravelTable)->insert($data);
-
-                    // Links to other elements are written once every iblock is in
-                    $this->deferLinks($iblock, $laravelTable, (int) $element['ID']);
-
-                } catch (\Exception $e) {
-                    $this->newLine();
-                    $this->error("  Error inserting element {$element['ID']}: {$e->getMessage()}");
-                }
-
-                $bar->advance();
+                // Links to other elements are written once every iblock is in
+                $this->deferLinks($iblock, $laravelTable, (int) $element['ID']);
+            } catch (\Exception $e) {
+                $this->newLine();
+                $this->error("  Error inserting element {$element['ID']}: {$e->getMessage()}");
             }
-
-            $offset += $this->chunkSize;
         }
 
-        $bar->finish();
         $this->newLine();
+    }
+
+    /**
+     * The rows of a table, one chunk after another.
+     *
+     * @param  \Closure(int):array  $fetch  reads a chunk from the given offset
+     */
+    private function chunked(int $total, \Closure $fetch): \Generator
+    {
+        for ($offset = 0; $offset < $total; $offset += $this->chunkSize) {
+            yield from $fetch($offset);
+        }
     }
 
     /**
@@ -481,28 +459,25 @@ class MigrateDataCommand extends AbstractBitrixCommand
     /**
      * Get property values for version 1 IBlock
      */
-    protected function getPropertyValuesV1(int $elementId, IBlock $iblock): array
+    private function getPropertyValuesV1(int $elementId, IBlock $iblock): array
     {
         $connection = $this->getBitrixConnection();
         $values = $connection->getElementPropertyValues($iblock->id, $elementId);
 
+        $properties = array_column($iblock->properties, null, 'id');
+
         $result = [];
         foreach ($values as $value) {
-            $propertyId = $value['IBLOCK_PROPERTY_ID'];
+            $property = $properties[$value['IBLOCK_PROPERTY_ID']] ?? null;
 
-            // Find property by ID
-            foreach ($iblock->properties as $property) {
-                if ($property->id === (int) $propertyId) {
-                    if ($property->multiple) {
-                        if (! isset($result[$property->code])) {
-                            $result[$property->code] = [];
-                        }
-                        $result[$property->code][] = $value['VALUE'];
-                    } else {
-                        $result[$property->code] = $value['VALUE'];
-                    }
-                    break;
-                }
+            if ($property === null) {
+                continue;
+            }
+
+            if ($property->multiple) {
+                $result[$property->code][] = $value['VALUE'];
+            } else {
+                $result[$property->code] = $value['VALUE'];
             }
         }
 
@@ -516,7 +491,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
      * are rows of b_iblock_element_prop_mN: the column of the same name in
      * prop_sN is only a cache Bitrix may leave empty.
      */
-    protected function getPropertyValuesV2(int $elementId, IBlock $iblock): ?array
+    private function getPropertyValuesV2(int $elementId, IBlock $iblock): ?array
     {
         $connection = $this->getBitrixConnection();
         $values = $connection->getElementPropertyValuesV2($iblock->id, $elementId);
@@ -538,12 +513,8 @@ class MigrateDataCommand extends AbstractBitrixCommand
     /**
      * Get property value from array
      */
-    protected function getPropertyValue(IBlockProperty $property, ?array $values, int $version): mixed
+    private function getPropertyValue(IBlockProperty $property, ?array $values, int $version): mixed
     {
-        if ($values === null) {
-            return null;
-        }
-
         if ($version === 2) {
             $columnName = 'PROPERTY_'.$property->id;
 
@@ -556,49 +527,23 @@ class MigrateDataCommand extends AbstractBitrixCommand
     /**
      * Transform property value
      */
-    protected function transformPropertyValue(IBlockProperty $property, mixed $value): mixed
+    private function transformPropertyValue(IBlockProperty $property, mixed $value): mixed
     {
         if ($value === null || $value === '' || (is_string($value) && trim($value) === '')) {
             return null;
         }
 
         // Handle arrays of serialized values (multiple-value properties)
-        if (is_array($value)) {
-            $hasSerializedElements = false;
-            foreach ($value as $v) {
-                if (is_string($v) && preg_match('/^[aOsbNid]:[0-9]+/', $v)) {
-                    $hasSerializedElements = true;
-                    break;
-                }
-            }
-
-            if ($hasSerializedElements) {
-                $unserialized = [];
-                foreach ($value as $v) {
-                    if (is_string($v) && preg_match('/^[aOsbNid]:[0-9]+/', $v)) {
-                        $u = @unserialize($v);
-                        if ($u !== false || $v === 'b:0;') {
-                            $unserialized[] = $u;
-                        } else {
-                            $unserialized[] = $v;
-                        }
-                    } else {
-                        $unserialized[] = $v;
-                    }
-                }
-                $value = $unserialized;
-            }
+        if (is_array($value) && array_filter($value, $this->looksSerialized(...))) {
+            $value = array_values(array_map($this->unserializeOrKeep(...), $value));
         }
 
         // Handle serialized data (check if it looks like serialized PHP)
-        if (is_string($value) && preg_match('/^[aOsbNid]:[0-9]+/', $value)) {
-            $unserialized = @unserialize($value);
-            if ($unserialized !== false || $value === 'b:0;') {
-                $value = $unserialized;
-                // Check again after unserialization - value might become empty
-                if ($value === null || $value === '' || $value === false || (is_string($value) && trim($value) === '')) {
-                    return null;
-                }
+        if ($this->looksSerialized($value)) {
+            $value = $this->unserializeOrKeep($value);
+            // Check again after unserialization - value might become empty
+            if ($value === null || $value === '' || $value === false || (is_string($value) && trim($value) === '')) {
+                return null;
             }
         }
 
@@ -609,9 +554,6 @@ class MigrateDataCommand extends AbstractBitrixCommand
 
         if ($property->isFile() && ! $this->skipFiles) {
             if (is_array($value)) {
-                if (empty($value)) {
-                    return null;
-                }
                 $files = array_filter(array_map([$this, 'migrateFile'], $value));
 
                 return empty($files) ? null : json_encode(array_values($files));
@@ -639,25 +581,23 @@ class MigrateDataCommand extends AbstractBitrixCommand
             if (is_array($value)) {
                 $result = [];
                 foreach ($value as $v) {
-                    foreach ($property->enumValues as $enum) {
-                        if ($enum->id === (int) $v) {
-                            $result[] = $enum->xmlId ?: (string) $enum->id;
-                            break;
-                        }
+                    $xmlId = $this->enumXmlId($property, $v);
+
+                    if ($xmlId !== null) {
+                        $result[] = $xmlId;
                     }
                 }
 
                 // Return null for empty arrays
                 return empty($result) ? null : json_encode($result);
             }
-            // Convert enum ID to XML_ID
-            foreach ($property->enumValues as $enum) {
-                if ($enum->id === (int) $value) {
-                    return $enum->xmlId ?: (string) $enum->id;
-                }
-            }
 
-            return is_scalar($value) ? $value : null;
+            // Convert enum ID to XML_ID, an unknown one stays as it is
+            $xmlId = $this->enumXmlId($property, $value);
+
+            if ($xmlId !== null) {
+                return $xmlId;
+            }
         }
 
         if ($property->isHtml() && is_array($value)) {
@@ -705,89 +645,125 @@ class MigrateDataCommand extends AbstractBitrixCommand
     }
 
     /**
+     * Does the value look like PHP serialize() output (the way Bitrix stores
+     * complex values)?
+     */
+    private function looksSerialized(mixed $value): bool
+    {
+        return is_string($value) && preg_match('/\A[aOsbNid]:[0-9]+/', $value) === 1;
+    }
+
+    /**
+     * The unserialized value, or the text itself when it does not unserialize.
+     */
+    private function unserializeOrKeep(mixed $value): mixed
+    {
+        if (! $this->looksSerialized($value)) {
+            return $value;
+        }
+
+        $unserialized = @unserialize($value);
+
+        return $unserialized !== false || $value === 'b:0;' ? $unserialized : $value;
+    }
+
+    /**
+     * The XML_ID (or the ID, when it has none) of the list value with the
+     * given enum ID, null when the property has no such value.
+     */
+    private function enumXmlId(IBlockProperty $property, mixed $enumId): ?string
+    {
+        foreach ($property->enumValues as $enum) {
+            if ($enum->id === (int) $enumId) {
+                return $enum->xmlId ?: (string) $enum->id;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Migrate element pivot data
      */
-    protected function migrateElementPivotData(array $element, IBlock $iblock, string $mainTable): void
+    private function migrateElementPivotData(array $element, IBlock $iblock, string $mainTable): void
     {
         $connection = $this->getBitrixConnection();
         $naming = $this->getNaming();
 
-        Schema::disableForeignKeyConstraints();
-
-        foreach ($iblock->properties as $property) {
-            if (! $property->needsPivotTable()) {
-                continue;
-            }
-
-            // Get multiple values
-            $propertyValues = $iblock->version === 2
-                ? $connection->getElementMultiplePropertyValues($iblock->id, $element['ID'])
-                : $this->getPropertyValuesV1($element['ID'], $iblock);
-
-            // Find values for this property
-            $values = [];
-            if ($iblock->version === 2) {
-                foreach ($propertyValues as $pv) {
-                    if (($pv['IBLOCK_PROPERTY_ID'] ?? null) === $property->id) {
-                        $values[] = $pv['VALUE'];
-                    }
-                }
-            } else {
-                $values = $propertyValues[$property->code] ?? [];
-            }
-
-            if (empty($values)) {
-                continue;
-            }
-
-            // Insert into pivot table
-            $pivotTable = $mainTable.'_'.$naming->toColumnName($property->code);
-            $singularMainTable = Str::singular($mainTable);
-
-            foreach ($values as $index => $value) {
-                if (empty($value)) {
+        Schema::withoutForeignKeyConstraints(function () use ($iblock, $element, $mainTable, $connection, $naming): void {
+            foreach ($iblock->properties as $property) {
+                if (! $property->needsPivotTable()) {
                     continue;
                 }
 
-                $pivotData = [
-                    "{$singularMainTable}_id" => $element['ID'],
-                    'sort' => $index,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
+                // Get multiple values
+                $propertyValues = $iblock->version === 2
+                    ? $connection->getElementMultiplePropertyValues($iblock->id, $element['ID'])
+                    : $this->getPropertyValuesV1($element['ID'], $iblock);
 
-                // Determine foreign key based on property code (same formula as in ElementMigrationGenerator)
-                $columnName = $naming->toColumnName($property->code);
-                $relatedKey = Str::singular($columnName).'_id';
+                // Find values for this property
+                $values = [];
+                if ($iblock->version === 2) {
+                    foreach ($propertyValues as $pv) {
+                        if (($pv['IBLOCK_PROPERTY_ID'] ?? null) === $property->id) {
+                            $values[] = $pv['VALUE'];
+                        }
+                    }
+                } else {
+                    $values = $propertyValues[$property->code] ?? [];
+                }
 
-                if ($property->isElementLink()) {
-                    $pivotData[$relatedKey] = $value;
-                } elseif ($property->isSectionLink()) {
-                    $pivotData['section_id'] = $value;
-                } elseif ($property->isDirectory()) {
-                    $relatedTable = $naming->hlblockToTableName($property->directoryTableName);
+                if (empty($values)) {
+                    continue;
+                }
 
-                    // Directory values are XML_ID, need to find Laravel ID
-                    $relatedId = DB::table($relatedTable)
-                        ->where('xml_id', $value)
-                        ->value('id');
+                // Insert into pivot table
+                $pivotTable = $mainTable.'_'.$naming->toColumnName($property->code);
+                $singularMainTable = Str::singular($mainTable);
 
-                    if (! $relatedId) {
-                        continue; // Skip if related record not found
+                foreach ($values as $index => $value) {
+                    if (empty($value)) {
+                        continue;
                     }
 
-                    $pivotData[$relatedKey] = $relatedId;
-                }
+                    $pivotData = [
+                        "{$singularMainTable}_id" => $element['ID'],
+                        'sort' => $index,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
 
-                try {
-                    DB::table($pivotTable)->insertOrIgnore($pivotData);
-                } catch (\Exception $e) {
-                    // Silently skip errors (duplicates, constraint violations)
+                    // Determine foreign key based on property code (same formula as in ElementMigrationGenerator)
+                    $columnName = $naming->toColumnName($property->code);
+                    $relatedKey = Str::singular($columnName).'_id';
+
+                    if ($property->isElementLink()) {
+                        $pivotData[$relatedKey] = $value;
+                    } elseif ($property->isSectionLink()) {
+                        $pivotData['section_id'] = $value;
+                    } elseif ($property->isDirectory()) {
+                        $relatedTable = $naming->hlblockToTableName($property->directoryTableName);
+
+                        // Directory values are XML_ID, need to find Laravel ID
+                        $relatedId = DB::table($relatedTable)
+                            ->where('xml_id', $value)
+                            ->value('id');
+
+                        if (! $relatedId) {
+                            continue; // Skip if related record not found
+                        }
+
+                        $pivotData[$relatedKey] = $relatedId;
+                    }
+
+                    try {
+                        DB::table($pivotTable)->insertOrIgnore($pivotData);
+                    } catch (\Exception $e) {
+                        // Silently skip errors (duplicates, constraint violations)
+                    }
                 }
             }
-        }
-
-        Schema::enableForeignKeyConstraints();
+        });
     }
 
     /**
@@ -795,27 +771,15 @@ class MigrateDataCommand extends AbstractBitrixCommand
      */
     protected function parseDate(mixed $value): ?string
     {
-        if ($value === null || $value === '' || $value === '0000-00-00 00:00:00') {
+        if (! is_string($value) || $value === '' || $value === '0000-00-00 00:00:00') {
             return null;
         }
 
-        // If it's already a valid date string, return it
-        if (is_string($value)) {
-            try {
-                $date = new \DateTime($value);
-
-                return $date->format('Y-m-d H:i:s');
-            } catch (\Exception $e) {
-                return null;
-            }
-        }
-
-        // If it's an array or other non-scalar, return null
-        if (! is_scalar($value)) {
+        try {
+            return (new \DateTime($value))->format('Y-m-d H:i:s');
+        } catch (\Exception $e) {
             return null;
         }
-
-        return null;
     }
 
     /**
@@ -823,10 +787,6 @@ class MigrateDataCommand extends AbstractBitrixCommand
      */
     protected function migrateFile(mixed $fileId): ?string
     {
-        if (empty($fileId)) {
-            return null;
-        }
-
         $connection = $this->getBitrixConnection();
         $file = $connection->getFile((int) $fileId);
 
@@ -845,22 +805,16 @@ class MigrateDataCommand extends AbstractBitrixCommand
 
         // Build source path from config
         $uploadPath = config('atrium-bitrix.upload_path');
-        if (! $uploadPath) {
-            // Return relative path for later processing
-            return '/upload/'.$relativePath;
-        }
-
         $sourcePath = $uploadPath.'/'.$relativePath;
 
-        if (! file_exists($sourcePath)) {
+        // Return relative path for later processing
+        if (! $uploadPath || ! file_exists($sourcePath)) {
             return '/upload/'.$relativePath;
         }
 
         // Copy to Laravel storage
         $destDir = storage_path('app/public/uploads/'.$file['SUBDIR']);
-        if (! is_dir($destDir)) {
-            mkdir($destDir, 0755, true);
-        }
+        File::ensureDirectoryExists($destDir);
 
         $destPath = $destDir.'/'.$file['FILE_NAME'];
         copy($sourcePath, $destPath);
@@ -871,11 +825,11 @@ class MigrateDataCommand extends AbstractBitrixCommand
     /**
      * Get JSON column names for a table
      */
-    protected function getJsonColumns(string $table): array
+    private function getJsonColumns(string $table): array
     {
         if (! isset($this->jsonColumnsCache[$table])) {
             $this->jsonColumnsCache[$table] = collect(Schema::getColumns($table))
-                ->filter(fn (array $column): bool => in_array(strtolower((string) $column['type_name']), ['json', 'jsonb'], true))
+                ->filter(fn (array $column): bool => in_array((string) $column['type_name'], ['json', 'jsonb'], true))
                 ->pluck('name')
                 ->all();
         }
@@ -905,7 +859,7 @@ class MigrateDataCommand extends AbstractBitrixCommand
     /**
      * Check if a string is valid JSON
      */
-    protected function isValidJson(mixed $value): bool
+    private function isValidJson(mixed $value): bool
     {
         if (! is_string($value)) {
             return false;
