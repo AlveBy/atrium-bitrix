@@ -154,6 +154,21 @@ final class DownloadUploadCommandTest extends SyntheticTestCase
         $this->assertFileDoesNotExist($this->local('../outside.txt'));
     }
 
+    public function test_a_name_that_starts_with_upload_keeps_its_place_in_the_tree(): void
+    {
+        $this->remote('upload/uploads/photo.jpg', 'JPEG');
+        $this->remote('upload/iblock/upload.png', 'PNG');
+        $this->remote('upload/upload_list.txt', 'list');
+
+        $this->artisan('atrium:bitrix:download:upload', $this->ftpOptions())
+            ->expectsOutput('Done! Downloaded: 3, Skipped: 0, Failed: 0')
+            ->assertSuccessful();
+
+        $this->assertSame('JPEG', file_get_contents($this->local('uploads/photo.jpg')));
+        $this->assertSame('PNG', file_get_contents($this->local('iblock/upload.png')));
+        $this->assertSame('list', file_get_contents($this->local('upload_list.txt')));
+    }
+
     public function test_credentials_and_root_come_from_the_config_when_not_given(): void
     {
         config(['atrium-bitrix.ftp' => [

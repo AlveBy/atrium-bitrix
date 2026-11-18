@@ -153,7 +153,7 @@ class DownloadUploadCommand extends Command
         foreach ($entries as $entry) {
             $name = $entry['name'];
             $entryPath = rtrim($remotePath, '/').'/'.$name;
-            $localPath = $this->dest.str_replace('/upload', '', $entryPath);
+            $localPath = $this->dest.substr($entryPath, strlen('/upload'));
 
             if ($entry['type'] === 'dir') {
                 File::ensureDirectoryExists($localPath);
