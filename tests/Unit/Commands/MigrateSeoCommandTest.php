@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace Atrium\Bitrix\Tests\Unit\Commands;
 
 use Atrium\Bitrix\Tests\SyntheticTestCase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -133,6 +134,8 @@ final class MigrateSeoCommandTest extends SyntheticTestCase
         yield 'a repetition with a separator stays' => ['Georgia. Georgia.', 'Georgia. Georgia.'];
         yield 'two different halves stay' => ['abcd', 'abcd'];
         yield 'one character stays' => ['A', 'A'];
+        yield 'two equal characters are one stored twice' => ['aa', 'a'];
+        yield 'an odd length stays' => ['abcabcabc', 'abcabcabc'];
         yield 'surrounding spaces go' => ['  Spaced  ', 'Spaced'];
         yield 'only spaces is no value' => ['   ', null];
     }
@@ -152,13 +155,13 @@ final class MigrateSeoCommandTest extends SyntheticTestCase
     public function test_every_bitrix_code_lands_in_its_column(): void
     {
         $this->iproperty([
+            ['ELEMENT_SOMETHING_ELSE', 'E', 2, 'ignored'],
             ['ELEMENT_PAGE_TITLE', 'E', 2, 'H1'],
             ['ELEMENT_PREVIEW_PICTURE_FILE_TITLE', 'E', 2, 'preview title'],
             ['ELEMENT_PREVIEW_PICTURE_FILE_NAME', 'E', 2, 'preview-file'],
             ['ELEMENT_DETAIL_PICTURE_FILE_ALT', 'E', 2, 'detail alt'],
             ['ELEMENT_DETAIL_PICTURE_FILE_TITLE', 'E', 2, 'detail title'],
             ['ELEMENT_DETAIL_PICTURE_FILE_NAME', 'E', 2, 'detail-file'],
-            ['ELEMENT_SOMETHING_ELSE', 'E', 2, 'ignored'],
             ['SECTION_PICTURE_FILE_ALT', 'S', 1, 'section alt'],
             ['SECTION_PICTURE_FILE_TITLE', 'S', 1, 'section title'],
             ['SECTION_PICTURE_FILE_NAME', 'S', 1, 'section-file'],
@@ -204,6 +207,72 @@ final class MigrateSeoCommandTest extends SyntheticTestCase
         $this->artisan('atrium:bitrix:migrate:seo', ['--force' => true])->expectsOutput('Written: 1')->assertSuccessful();
 
         $this->assertSame('laptop, pro', $this->seo('products', 1)['tags'] ?? null);
+    }
+
+    private function referenceWithSeo(): void
+    {
+        $namespace = self::NAMESPACE.'\\References';
+        file_put_contents($this->workDir.'/models/References/Seoed.php', "<?php\nnamespace {$namespace};\nclass Seoed extends \\Illuminate\\Database\\Eloquent\\Model { use \\Atrium\\Admin\\Traits\\HasAdminSeo; }\n");
+    }
+
+    public function test_a_reference_model_with_seo_counts_too(): void
+    {
+        $this->referenceWithSeo();
+
+        $this->artisan('atrium:bitrix:migrate:seo', ['--dry-run' => true])
+            ->expectsOutput('Models with SEO support: 4')
+            ->assertSuccessful();
+    }
+
+    public function test_the_reference_folder_is_read_when_the_model_folder_is_missing(): void
+    {
+        $this->referenceWithSeo();
+        config(['atrium-bitrix.model_path' => $this->workDir.'/no-such-dir']);
+
+        $this->artisan('atrium:bitrix:migrate:seo', ['--dry-run' => true])
+            ->expectsOutput('Models with SEO support: 1')
+            ->assertSuccessful();
+    }
+
+    public function test_namespaces_written_with_a_trailing_backslash_still_find_their_models(): void
+    {
+        $this->referenceWithSeo();
+        config([
+            'atrium-bitrix.model_namespace' => self::NAMESPACE.'\\',
+            'atrium-bitrix.reference_namespace' => self::NAMESPACE.'\\References\\',
+        ]);
+
+        $this->artisan('atrium:bitrix:migrate:seo', ['--dry-run' => true])
+            ->expectsOutput('Models with SEO support: 4')
+            ->assertSuccessful();
+    }
+
+    public function test_the_progress_and_the_totals_are_set_apart_by_blank_lines(): void
+    {
+        Artisan::call('atrium:bitrix:migrate:seo', ['--force' => true]);
+
+        $expected = <<<'TXT'
+        Models with SEO support: 3
+        Entities with SEO in Bitrix: 2
+         0/2 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0%
+         2/2 [▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓] 100%
+
+        Written: 2
+
+        TXT;
+
+        $this->assertSame($expected, Artisan::output());
+    }
+
+    public function test_a_title_is_cut_by_characters_not_by_bytes(): void
+    {
+        $this->iproperty([['ELEMENT_META_TITLE', 'E', 2, str_repeat('Я', 200).'!']]);
+
+        $this->artisan('atrium:bitrix:migrate:seo', ['--force' => true])
+            ->doesntExpectOutputToContain('Truncated')
+            ->assertSuccessful();
+
+        $this->assertSame(str_repeat('Я', 200).'!', $this->seo('products', 2)['title'] ?? null);
     }
 
     public function test_values_too_long_for_their_column_are_cut(): void
@@ -298,6 +367,8 @@ final class MigrateSeoCommandTest extends SyntheticTestCase
         file_put_contents($this->workDir.'/models/Helper.php', "<?php\nnamespace {$namespace};\nclass Helper {}\n");
         file_put_contents($this->workDir.'/models/Plain.php', "<?php\nnamespace {$namespace};\nclass Plain extends \\Illuminate\\Database\\Eloquent\\Model {}\n");
         file_put_contents($this->workDir.'/models/NotAClass.php', "<?php\n");
+        // Uses the trait, but is not a model: there is nothing to ask for its table.
+        file_put_contents($this->workDir.'/models/NotAModel.php', "<?php\nnamespace {$namespace};\nclass NotAModel { use \\Atrium\\Admin\\Traits\\HasAdminSeo; }\n");
 
         // News, Product and ProductSection; the Brands reference has no SEO.
         $this->artisan('atrium:bitrix:migrate:seo', ['--dry-run' => true])
