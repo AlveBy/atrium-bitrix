@@ -76,7 +76,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
 
     private int $truncated = 0;
 
-    /** @var array<string,int> */
+    /** @var array<string,string> name => name, so a table is listed once */
     private array $missingTables = [];
 
     public function handle(): int
@@ -91,7 +91,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
             return self::FAILURE;
         }
 
-        $dryRun = (bool) $this->option('dry-run');
+        $dryRun = $this->option('dry-run');
 
         $this->written = $this->skippedNoModel = $this->skippedNoRow = $this->truncated = 0;
         $this->missingTables = [];
@@ -120,7 +120,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
         $iblockCodes = $this->iblockCodes();
         $tagsByElement = $this->fetchElementTags();
 
-        $this->withProgress(array_values($groups), function (array $group) use ($iblockCodes, $tagsByElement, $dryRun): void {
+        $this->withProgress($groups, function (array $group) use ($iblockCodes, $tagsByElement, $dryRun): void {
             $this->applyGroup($group, $iblockCodes, $tagsByElement, $dryRun);
         });
 
@@ -128,7 +128,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
         $this->info(sprintf('Written: %d', $this->written));
 
         if ($this->skippedNoModel > 0) {
-            $this->warn(sprintf('Skipped (no model for the table): %d - %s', $this->skippedNoModel, implode(', ', array_keys($this->missingTables))));
+            $this->warn(sprintf('Skipped (no model for the table): %d - %s', $this->skippedNoModel, implode(', ', $this->missingTables)));
         }
 
         if ($this->skippedNoRow > 0) {
@@ -194,7 +194,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
             ->whereNotNull('TEMPLATE')
             ->where('TEMPLATE', '<>', '');
 
-        $only = array_map('intval', (array) $this->option('iblock'));
+        $only = $this->option('iblock');
 
         if ($only !== []) {
             $query->whereIn('IBLOCK_ID', $only);
@@ -214,16 +214,16 @@ class MigrateSeoCommand extends AbstractBitrixCommand
         $groups = [];
 
         foreach ($rows as $row) {
-            $key = $row['IBLOCK_ID'].':'.$row['ENTITY_TYPE'].':'.$row['ENTITY_ID'];
+            $key = "{$row['IBLOCK_ID']}:{$row['ENTITY_TYPE']}:{$row['ENTITY_ID']}";
 
             $groups[$key] ??= [
-                'iblock_id' => (int) $row['IBLOCK_ID'],
-                'entity_type' => (string) $row['ENTITY_TYPE'],
-                'entity_id' => (int) $row['ENTITY_ID'],
+                'iblock_id' => $row['IBLOCK_ID'],
+                'entity_type' => $row['ENTITY_TYPE'],
+                'entity_id' => $row['ENTITY_ID'],
                 'values' => [],
             ];
 
-            $groups[$key]['values'][(string) $row['CODE']] = (string) $row['TEMPLATE'];
+            $groups[$key]['values'][$row['CODE']] = $row['TEMPLATE'];
         }
 
         return $groups;
@@ -235,7 +235,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
         $codes = [];
 
         foreach ($this->getBitrixConnection()->getIBlocks() as $iblock) {
-            $codes[(int) $iblock['ID']] = (string) ($iblock['CODE'] ?? '');
+            $codes[$iblock['ID']] = $iblock['CODE'] ?? '';
         }
 
         return $codes;
@@ -257,7 +257,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
         $tags = [];
 
         foreach ($rows as $row) {
-            $tags[(int) $row->ID] = (string) $row->TAGS;
+            $tags[$row->ID] = $row->TAGS;
         }
 
         return $tags;
@@ -274,7 +274,8 @@ class MigrateSeoCommand extends AbstractBitrixCommand
 
         if ($code === '') {
             $this->skippedNoModel++;
-            $this->missingTables['iblock '.$group['iblock_id'].' without code'] = 1;
+            $name = 'iblock '.$group['iblock_id'].' without code';
+            $this->missingTables[$name] = $name;
 
             return;
         }
@@ -288,7 +289,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
 
         if ($modelClass === null) {
             $this->skippedNoModel++;
-            $this->missingTables[$table] = ($this->missingTables[$table] ?? 0) + 1;
+            $this->missingTables[$table] = $table;
 
             return;
         }
@@ -356,7 +357,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
      */
     private function resolveTemplate(string $template, Model $record): string
     {
-        $name = (string) ($record->getAttribute('name') ?? '');
+        $name = $record->getAttribute('name') ?? '';
 
         return trim(str_replace('{=this.Name}', $name, $template));
     }
@@ -376,13 +377,7 @@ class MigrateSeoCommand extends AbstractBitrixCommand
      */
     private static function undouble(string $value): string
     {
-        $length = mb_strlen($value);
-
-        if ($length < 2 || $length % 2 !== 0) {
-            return $value;
-        }
-
-        $half = mb_substr($value, 0, intdiv($length, 2));
+        $half = mb_substr($value, 0, intdiv(mb_strlen($value), 2));
 
         return $half.$half === $value ? $half : $value;
     }
