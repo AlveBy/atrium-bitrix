@@ -144,14 +144,11 @@ abstract class AbstractBitrixCommand extends Command
     protected function withProgress(array $items, callable $callback): void
     {
         $bar = $this->output->createProgressBar(count($items));
-        $bar->start();
 
-        foreach ($items as $item) {
+        foreach ($bar->iterate($items) as $item) {
             $callback($item);
-            $bar->advance();
         }
 
-        $bar->finish();
         $this->newLine();
     }
 
@@ -266,19 +263,11 @@ abstract class AbstractBitrixCommand extends Command
     }
 
     /**
-     * Get skip list from config
-     */
-    protected function getSkipList(): array
-    {
-        return config('atrium-bitrix.skip_iblocks', []);
-    }
-
-    /**
      * Check if IBlock should be skipped
      */
     protected function shouldSkipIBlock(int $iblockId, ?string $code = null): bool
     {
-        $skipList = $this->getSkipList();
+        $skipList = config('atrium-bitrix.skip_iblocks', []);
 
         if (in_array($iblockId, $skipList)) {
             return true;

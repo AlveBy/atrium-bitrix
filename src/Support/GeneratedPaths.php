@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace Atrium\Bitrix\Support;
 
+use Illuminate\Support\Str;
+
 /**
  * Where generated classes are written: the configured folder, or the one
  * PSR-4 implies for the namespace (App\Models → app/Models).
@@ -26,7 +28,7 @@ final class GeneratedPaths
         $relative = str_replace('\\', '/', trim($namespace, '\\'));
 
         if (str_starts_with($relative, 'App/')) {
-            return app_path(substr($relative, 4));
+            return app_path(Str::after($relative, 'App/'));
         }
 
         return base_path($relative);
