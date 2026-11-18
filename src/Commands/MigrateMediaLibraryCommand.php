@@ -149,23 +149,27 @@ class MigrateMediaLibraryCommand extends AbstractBitrixCommand
 
             $extension = strtolower(pathinfo((string) $row->FILE_NAME, PATHINFO_EXTENSION));
 
-            MediaItem::updateOrCreate(
-                ['bitrix_id' => $row->ID],
-                [
-                    'collection_id' => $row->COLLECTION_ID === null ? null : ($collections[$row->COLLECTION_ID] ?? null),
-                    'name' => $this->itemName($row),
-                    'description' => $row->DESCRIPTION ?: null,
-                    'keywords' => $row->KEYWORDS ?: null,
-                    'url' => $url,
-                    'disk' => null,
-                    'path' => null,
-                    'extension' => $extension,
-                    'mime_type' => $row->CONTENT_TYPE ?: null,
-                    'size' => $row->FILE_SIZE ?: null,
-                    'is_image' => in_array($extension, self::IMAGE_EXTENSIONS, true),
-                    'created_at' => $row->DATE_CREATE,
-                ]
-            );
+            $item = MediaItem::firstOrNew(['bitrix_id' => $row->ID]);
+            $item->fill([
+                'collection_id' => $row->COLLECTION_ID === null ? null : ($collections[$row->COLLECTION_ID] ?? null),
+                'name' => $this->itemName($row),
+                'description' => $row->DESCRIPTION ?: null,
+                'keywords' => $row->KEYWORDS ?: null,
+                'url' => $url,
+                'disk' => null,
+                'path' => null,
+                'extension' => $extension,
+                'mime_type' => $row->CONTENT_TYPE ?: null,
+                'size' => $row->FILE_SIZE ?: null,
+                'is_image' => in_array($extension, self::IMAGE_EXTENSIONS, true),
+            ]);
+
+            // Not fillable: the date is the one Bitrix has, not the day of the import.
+            if ($row->DATE_CREATE !== null) {
+                $item->created_at = $row->DATE_CREATE;
+            }
+
+            $item->save();
 
             $imported++;
         }

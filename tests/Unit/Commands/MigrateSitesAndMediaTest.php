@@ -224,6 +224,23 @@ final class MigrateSitesAndMediaTest extends SyntheticTestCase
         $this->assertNull($zero->parent_id);
     }
 
+    public function test_an_item_keeps_the_date_it_was_created_on_in_bitrix(): void
+    {
+        $this->seedLibrary();
+
+        $this->artisan('atrium:bitrix:migrate:medialibrary')->assertSuccessful();
+
+        $this->assertSame('2024-01-01 00:00:00', MediaItem::query()->where('bitrix_id', 1)->sole()->created_at->format('Y-m-d H:i:s'));
+        $this->assertSame('2024-02-01 00:00:00', MediaItem::query()->where('bitrix_id', 2)->sole()->created_at->format('Y-m-d H:i:s'));
+        $this->assertSame(now()->format('Y-m-d'), MediaItem::query()->where('bitrix_id', 4)->sole()->created_at->format('Y-m-d'), 'no date in Bitrix: the import day');
+
+        $this->bitrix()->table('b_medialib_item')->where('ID', 1)->update(['DATE_CREATE' => '2023-05-05 10:00:00']);
+        $this->artisan('atrium:bitrix:migrate:medialibrary')->assertSuccessful();
+
+        $this->assertSame('2023-05-05 10:00:00', MediaItem::query()->where('bitrix_id', 1)->sole()->created_at->format('Y-m-d H:i:s'));
+        $this->assertSame(3, MediaItem::count());
+    }
+
     public function test_a_dry_run_of_the_library_lists_it_and_writes_nothing(): void
     {
         $this->seedLibrary();
