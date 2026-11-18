@@ -12,6 +12,7 @@ namespace Atrium\Bitrix\Tests\Unit\Commands;
 use Atrium\Bitrix\Tests\Fixtures\FakeFtpServer;
 use Atrium\Bitrix\Tests\SyntheticTestCase;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Artisan;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -198,6 +199,20 @@ final class DownloadUploadCommandTest extends SyntheticTestCase
         }
     }
 
+    public function test_a_root_that_is_set_but_empty_in_the_config_is_the_server_root_too(): void
+    {
+        config(['atrium-bitrix.ftp' => ['host' => self::$server?->address, 'user' => 'bitrix', 'password' => 'secret', 'root' => null]]);
+        file_put_contents(self::$root.'/index.php', '<?php');
+
+        try {
+            $this->artisan('atrium:bitrix:download:upload', ['--dest' => $this->dest])
+                ->expectsOutput('FTP connected.')
+                ->assertSuccessful();
+        } finally {
+            unlink(self::$root.'/index.php');
+        }
+    }
+
     public function test_existing_files_are_kept_when_told_to_skip_them(): void
     {
         $this->remote('upload/a.txt', 'new a');
@@ -232,20 +247,23 @@ final class DownloadUploadCommandTest extends SyntheticTestCase
     public function test_a_file_that_cannot_be_fetched_is_counted_and_links_are_left_alone(): void
     {
         $this->remote('upload/real.txt', 'real');
+        $this->remote('upload/after.txt', 'after');
         $this->remote('upload/.listing', implode("\r\n", [
             '-rw-r--r--   1 ftp ftp        4 Jan 01 12:00 real.txt',
             '-rw-r--r--   1 ftp ftp        9 Jan 01 12:00 vanished.txt',
             'lrwxrwxrwx   1 ftp ftp        8 Jan 01 12:00 latest -> real.txt',
+            '-rw-r--r--   1 ftp ftp        5 Jan 01 12:00 after.txt',
         ]));
 
         $this->artisan('atrium:bitrix:download:upload', $this->ftpOptions())
             ->expectsOutput('  FAIL: /upload/vanished.txt')
-            ->expectsOutput('Done! Downloaded: 1, Skipped: 0, Failed: 1')
+            ->expectsOutput('Done! Downloaded: 2, Skipped: 0, Failed: 1')
             ->assertSuccessful();
 
         $this->assertSame('real', file_get_contents($this->local('real.txt')));
+        $this->assertSame('after', file_get_contents($this->local('after.txt')), 'the file after the failed one is still fetched');
         $this->assertFileDoesNotExist($this->local('vanished.txt'));
-        $this->assertSame(['real.txt'], array_values(array_diff(scandir($this->local('')) ?: [], ['.', '..'])));
+        $this->assertSame(['after.txt', 'real.txt'], array_values(array_diff(scandir($this->local('')) ?: [], ['.', '..'])));
     }
 
     public function test_the_counts_of_one_run_do_not_carry_over_to_the_next(): void
@@ -307,6 +325,66 @@ final class DownloadUploadCommandTest extends SyntheticTestCase
         $this->assertSame('local logo', file_get_contents($this->local('medialibrary/i5j/logo.png')));
         $this->assertFileDoesNotExist($this->local('iblock/g4h/hardware.png'));
         $this->assertFileDoesNotExist($this->local('unlisted.txt'));
+    }
+
+    public function test_from_the_database_a_file_missing_on_the_server_does_not_stop_the_ones_after_it(): void
+    {
+        // b_file lists the laptop photo first; the server has none of it.
+        $this->remote('upload/iblock/c2d/laptop-side.jpg', 'side');
+        $this->remote('upload/iblock/e3f/manual.pdf', 'manual');
+        $this->remote('upload/iblock/g4h/hardware.png', 'hardware');
+        $this->remote('upload/medialibrary/i5j/logo.png', 'logo');
+
+        $this->artisan('atrium:bitrix:download:upload', $this->ftpOptions(['--from-db' => true]))
+            ->expectsOutput('  failed to download: iblock/a1b/laptop.jpg')
+            ->expectsOutput('Done! Downloaded: 4, Skipped: 0, Failed: 1')
+            ->assertSuccessful();
+
+        $this->assertSame('logo', file_get_contents($this->local('medialibrary/i5j/logo.png')));
+        $this->assertFileDoesNotExist($this->local('iblock/a1b/laptop.jpg'));
+    }
+
+    public function test_the_tree_run_reports_each_step_with_blank_lines_between_them(): void
+    {
+        $this->remote('upload/notes.txt', 'text');
+
+        $this->assertSame(0, Artisan::call('atrium:bitrix:download:upload', $this->ftpOptions()));
+
+        $this->assertSame(
+            'Connecting to FTP: '.self::$server?->address."...\n"
+            ."FTP connected.\n"
+            .'Destination: '.base_path($this->dest)."\n"
+            ."\n"
+            ."Scanning and downloading /upload...\n"
+            ."\n"
+            ."  + /upload/notes.txt\n"
+            ."\n"
+            ."Done! Downloaded: 1, Skipped: 0, Failed: 0\n",
+            Artisan::output(),
+        );
+    }
+
+    public function test_the_database_run_reports_each_step_with_blank_lines_between_them(): void
+    {
+        $this->remote('upload/iblock/a1b/laptop.jpg', 'laptop');
+        $this->bitrix()->table('b_file')->whereNot('ID', 1)->delete();
+        $this->bitrix()->table('b_file')->where('ID', 1)->update(['SUBDIR' => '/iblock/a1b/']);
+
+        $this->assertSame(0, Artisan::call('atrium:bitrix:download:upload', $this->ftpOptions(['--from-db' => true])));
+
+        $this->assertSame(
+            'Connecting to FTP: '.self::$server?->address."...\n"
+            ."FTP connected.\n"
+            .'Destination: '.base_path($this->dest)."\n"
+            ."\n"
+            ."Files listed in the database: 1\n"
+            ."Missing locally: 1\n"
+            ."\n"
+            ."  + iblock/a1b/laptop.jpg\n"
+            ."\n"
+            ."Done! Downloaded: 1, Skipped: 0, Failed: 0\n",
+            Artisan::output(),
+        );
     }
 
     public function test_from_the_database_nothing_is_fetched_when_everything_is_in_place(): void
