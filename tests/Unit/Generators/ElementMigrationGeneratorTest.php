@@ -131,6 +131,8 @@ final class ElementMigrationGeneratorTest extends TestCase
             self::property('SECTION_ID', 'G', null, false, [], 'products'),
             self::property('SORT', 'N', null, false, ['FILTRABLE' => 'Y']),
             self::property('OTHER_SORT', 'N', null, false, ['FILTRABLE' => 'Y']),
+            self::property('THIRD_SORT', 'N', null, false, ['FILTRABLE' => 'Y']),
+            self::property('LINKED', 'E', null, false, [], 'news'),
         ));
 
         $this->assertStringNotContainsString('Field NAME', $migration);
@@ -139,8 +141,9 @@ final class ElementMigrationGeneratorTest extends TestCase
         $this->assertStringNotContainsString("foreign('section_id')", $migration);
         $this->assertStringNotContainsString("index('name')", $migration);
         $this->assertStringNotContainsString("index('sort')", $migration);
-        $this->assertStringContainsString("index('other_sort')", $migration);
+        $this->assertStringContainsString("// Indexes\n            \$table->index('other_sort');\n            \$table->index('third_sort');\n", $migration);
         $this->assertStringContainsString('Field OTHER_SORT', $migration);
+        $this->assertStringContainsString("// Foreign keys\n            \$table->foreign('linked')->references('id')->on('news')->nullOnDelete();\n", $migration, 'a property after the reserved ones is still handled');
     }
 
     /**
