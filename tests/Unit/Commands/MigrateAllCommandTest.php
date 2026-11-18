@@ -11,8 +11,12 @@ namespace Atrium\Bitrix\Tests\Unit\Commands;
 
 use Atrium\Admin\Models\Site;
 use Atrium\Bitrix\Tests\SyntheticTestCase;
+use Illuminate\Console\Command;
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * migrate: every step in a row, each one skippable or declinable.
@@ -60,6 +64,124 @@ final class MigrateAllCommandTest extends SyntheticTestCase
         $this->assertSame(['Contoso', 'Northwind'], DB::table('brands')->orderBy('name')->pluck('name')->all());
         $this->assertContains('Product.php', $this->generatedFiles('models'));
         $this->assertSame('s2', Site::query()->where('code', 's2')->value('code'));
+    }
+
+    public function test_the_whole_report_is_printed_in_order_with_blank_lines_between_its_parts(): void
+    {
+        $expected = <<<'TXT'
+        ╔════════════════════════════════════════╗
+        ║     Bitrix to Laravel Migration        ║
+        ╚════════════════════════════════════════╝
+
+
+        Step 1: Analyzing Bitrix database...
+        Bitrix Database Analyzer
+        ========================
+
+        Analyzing IBlocks...
+        +----+-----------+------+---------+-----+-------+----------+----------+-------+-----------+
+        | ID | Code      | Name | Type    | Ver | Props | Sections | Elements | Files | Relations |
+        +----+-----------+------+---------+-----+-------+----------+----------+-------+-----------+
+        | 1  | demo_news | News | content | 1   | 2     | 0        | 2        | No    | 1         |
+        +----+-----------+------+---------+-----+-------+----------+----------+-------+-----------+
+
+        Analyzing Highload Blocks...
+        +----+--------+---------------+--------+------+-------+
+        | ID | Name   | Table         | Fields | Rows | Files |
+        +----+--------+---------------+--------+------+-------+
+        | 1  | Brands | b_hlbd_brands | 3      | 2    | No    |
+        +----+--------+---------------+--------+------+-------+
+
+
+        Moving sites...
+        +------------+------+---------+---------+------------------------------+
+        | Bitrix LID | Code | DIR     | Folder  | Domains                      |
+        +------------+------+---------+---------+------------------------------+
+        | s1         | main | /       | /       | example.com, www.example.com |
+        | s2         | s2   | /en/    | /en/    | example.com, www.example.com |
+        | s3         | s3   | /site2/ | /site2/ | —                            |
+        +------------+------+---------+---------+------------------------------+
+
+        ╔════════════════════════════════════════╗
+        ║     Migration complete!                ║
+        ╚════════════════════════════════════════╝
+
+        Summary:
+          - Models generated in: WORK/models
+          - References generated in: WORK/models/References
+          - Migrations generated in: WORK/migrations
+
+        Next steps:
+          1. Review generated models and migrations
+          2. Configure admin panel for your models
+          3. Set up file storage if needed
+          4. Configure SEO and slugs
+
+        TXT;
+
+        Artisan::call('atrium:bitrix:migrate', [
+            '--force' => true, '--skip-models' => true, '--skip-migrations' => true, '--skip-data' => true,
+            '--iblock' => [1], '--hlblock' => [1],
+        ]);
+
+        $this->assertSame($expected, str_replace($this->workDir, 'WORK', Artisan::output()));
+    }
+
+    public function test_the_chunk_size_and_the_file_switch_reach_the_data_step(): void
+    {
+        $seen = [];
+        $this->app->make(Kernel::class)->registerCommand(new class($seen) extends Command
+        {
+            protected $signature = 'atrium:bitrix:migrate:data {--connection=} {--iblock=*} {--hlblock=*} {--chunk=} {--skip-files} {--force}';
+
+            /** @param array<int, array<string, mixed>> $seen */
+            public function __construct(private array &$seen)
+            {
+                parent::__construct();
+            }
+
+            public function handle(): int
+            {
+                $this->seen[] = $this->options();
+
+                return self::SUCCESS;
+            }
+        });
+
+        $this->artisan('atrium:bitrix:migrate', ['--force' => true, '--skip-migrations' => true, '--skip-models' => true, '--chunk' => '7', '--skip-files' => true, '--iblock' => [1], '--hlblock' => [1]])->assertSuccessful();
+        $this->artisan('atrium:bitrix:migrate', ['--force' => true, '--skip-migrations' => true, '--skip-models' => true, '--iblock' => [1], '--hlblock' => [1]])->assertSuccessful();
+
+        $this->assertCount(2, $seen);
+        $this->assertSame('7', $seen[0]['chunk']);
+        $this->assertTrue($seen[0]['skip-files']);
+        $this->assertSame('100', $seen[1]['chunk']);
+        $this->assertFalse($seen[1]['skip-files']);
+    }
+
+    /**
+     * @return array<string, array{string, list<string>}>
+     */
+    public static function steps(): array
+    {
+        return [
+            'migrations' => ['Step 2: Generating migrations...', ['--skip-models', '--skip-data']],
+            'models' => ['Step 3: Generating Eloquent models...', ['--skip-migrations', '--skip-data']],
+            'data' => ['Step 4: Migrating data...', ['--skip-migrations', '--skip-models']],
+        ];
+    }
+
+    /**
+     * @param  list<string>  $skipped
+     */
+    #[DataProvider('steps')]
+    public function test_each_step_starts_after_a_blank_line(string $heading, array $skipped): void
+    {
+        Artisan::call('atrium:bitrix:migrate', [
+            '--force' => true, '--skip-files' => true, '--iblock' => [1], '--hlblock' => [1],
+            ...array_fill_keys($skipped, true),
+        ]);
+
+        $this->assertStringContainsString("+\n\n{$heading}\n", Artisan::output());
     }
 
     public function test_declining_the_first_question_does_nothing(): void
