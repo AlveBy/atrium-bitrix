@@ -147,6 +147,51 @@ final class AnalyzeBitrixCommandTest extends SyntheticTestCase
         $this->assertStringContainsString("{\n    \"iblocks\": {", $output, 'pretty-printed');
     }
 
+    public function test_the_whole_report_is_printed_in_order_with_blank_lines_between_its_parts(): void
+    {
+        $this->bitrix()->table('b_iblock_property')->where('ID', 1)->update(['NAME' => 'Источник новости, если он указан']);
+
+        $output = $this->analyze(['--iblock' => ['1'], '--hlblock' => ['1'], '-v' => true]);
+
+        $this->assertSame(<<<'TXT'
+Bitrix Database Analyzer
+========================
+
+Analyzing IBlocks...
++----+-----------+------+---------+-----+-------+----------+----------+-------+-----------+
+| ID | Code      | Name | Type    | Ver | Props | Sections | Elements | Files | Relations |
++----+-----------+------+---------+-----+-------+----------+----------+-------+-----------+
+| 1  | demo_news | News | content | 1   | 2     | 0        | 2        | No    | 1         |
++----+-----------+------+---------+-----+-------+----------+----------+-------+-----------+
+
+
+Properties for IBlock: News (demo_news)
++----+------------+---------------------------+------+----------+----------+----------+
+| ID | Code       | Name                      | Type | Multiple | Required | Relation |
++----+------------+---------------------------+------+----------+----------+----------+
+| 1  | SOURCE     | Источник новости, если он | S    | No       | No       | -        |
+| 2  | LINK_GOODS | Products mentioned        | E    | Yes      | No       | E:2      |
++----+------------+---------------------------+------+----------+----------+----------+
+Analyzing Highload Blocks...
++----+--------+---------------+--------+------+-------+
+| ID | Name   | Table         | Fields | Rows | Files |
++----+--------+---------------+--------+------+-------+
+| 1  | Brands | b_hlbd_brands | 3      | 2    | No    |
++----+--------+---------------+--------+------+-------+
+
+
+Fields for Highload Block: Brands
++----+------------+---------+----------+----------+-----------+
+| ID | Field Name | Type    | Multiple | Required | Linked HL |
++----+------------+---------+----------+----------+-----------+
+| 3  | UF_NAME    | string  | No       | No       | -         |
+| 4  | UF_XML_ID  | string  | No       | No       | -         |
+| 5  | UF_SORT    | integer | No       | No       | -         |
++----+------------+---------+----------+----------+-----------+
+
+TXT, $output);
+    }
+
     /**
      * @param  array<string,mixed>  $options
      */
