@@ -15,6 +15,7 @@ use Atrium\Bitrix\Tests\Fixtures\SyntheticBitrix;
 use Atrium\Bitrix\Tests\SyntheticTestCase;
 use Illuminate\Console\OutputStyle;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -102,6 +103,137 @@ final class VerifyDataCommandTest extends SyntheticTestCase
             ->expectsOutput('Checks: 12 | OK: 12 | Failed: 0')
             ->doesntExpectOutputToContain('ID 1: OK')
             ->assertSuccessful();
+    }
+
+    public function test_a_run_is_reported_section_by_section(): void
+    {
+        $this->migrate();
+        SyntheticBitrix::writeUploads($this->workDir.'/public');
+        $output = new BufferedOutput;
+
+        Artisan::call('atrium:bitrix:verify', ['--iblock' => [2], '--hlblock' => [1], '--sample' => 2, '--check-files' => true], $output);
+
+        $this->assertSame(<<<'TEXT'
+Bitrix Data Verification
+========================
+
+
+=== Counts ===
+
++---+--------------------------+--------+---------+-------+------+
+| # | Entity                   | Bitrix | Laravel | Match | Diff |
++---+--------------------------+--------+---------+-------+------+
+| 1 | brands                   | 2      | 2       | OK    | 0    |
+| 1 | products                 | 3      | 3       | OK    | 0    |
+| 2 | product_sections (sect.) | 3      | 3       | OK    | 0    |
++---+--------------------------+--------+---------+-------+------+
+
+=== Pivot tables ===
+
++---+------------------+--------+---------+-------+
+| # | Table            | Bitrix | Laravel | Match |
++---+------------------+--------+---------+-------+
+| 1 | products_related | 2      | 2       | OK    |
++---+------------------+--------+---------+-------+
+
+=== Record spot check ===
+
+  Products (products): checking 2 records...
+    All 2 records match
+
+=== File check ===
+
+  products: all files present
+
+  Total file references: 2, missing: 0
+
+=== Summary ===
+Checks: 7 | OK: 7 | Failed: 0
+
+
+TEXT, $output->fetch());
+    }
+
+    public function test_a_highload_block_that_cannot_be_checked_does_not_stop_the_ones_after_it(): void
+    {
+        $this->migrate();
+        $this->bitrix()->table('b_hlblock_entity')->insert([
+            ['ID' => 2, 'NAME' => 'Colors', 'TABLE_NAME' => 'b_hlbd_colors'],
+            ['ID' => 3, 'NAME' => 'Shades', 'TABLE_NAME' => 'b_hlbd_shades'],
+        ]);
+
+        $this->artisan('atrium:bitrix:verify', ['--hlblock' => [9, 2, 1, 3], '--iblock' => [99], '--sample' => 0])
+            ->expectsTable(self::COUNT_HEADERS, [
+                [1, 'colors', '?', 'TABLE NOT FOUND', 'ERROR', '-'],
+                [2, 'brands', 2, 2, 'OK', 0],
+                [3, 'shades', '?', 'TABLE NOT FOUND', 'ERROR', '-'],
+            ])
+            ->expectsOutput('Checks: 3 | OK: 1 | Failed: 2')
+            ->assertFailed();
+    }
+
+    public function test_an_iblock_that_cannot_be_checked_does_not_stop_the_ones_after_it(): void
+    {
+        $this->migrate();
+        config(['atrium-bitrix.skip_iblocks' => [1]]);
+        SyntheticBitrix::writeUploads($this->workDir.'/public');
+
+        $this->artisan('atrium:bitrix:verify', ['--iblock' => [1, 99, 2], '--hlblock' => [9], '--sample' => 5, '--check-files' => true])
+            ->expectsTable(self::COUNT_HEADERS, [
+                [1, 'products', 3, 3, 'OK', 0],
+                [2, 'product_sections (sect.)', 3, 3, 'OK', 0],
+            ])
+            ->expectsOutput('  Products (products): checking 3 records...')
+            ->expectsOutput('  products: all files present')
+            ->expectsOutput('Checks: 7 | OK: 7 | Failed: 0')
+            ->assertSuccessful();
+    }
+
+    public function test_an_iblock_without_a_table_is_reported_and_the_next_one_is_still_checked(): void
+    {
+        $this->migrate();
+        SyntheticBitrix::writeUploads($this->workDir.'/public');
+        Schema::drop('news_link_goods');
+        Schema::drop('news');
+
+        $this->artisan('atrium:bitrix:verify', ['--iblock' => [1, 2], '--hlblock' => [9], '--sample' => 5, '--check-files' => true])
+            ->expectsTable(self::COUNT_HEADERS, [
+                [1, 'news', '?', 'TABLE NOT FOUND', 'ERROR', '-'],
+                [2, 'products', 3, 3, 'OK', 0],
+                [3, 'product_sections (sect.)', 3, 3, 'OK', 0],
+            ])
+            ->expectsOutput('  Products (products): checking 3 records...')
+            ->expectsOutput('  products: all files present')
+            ->doesntExpectOutputToContain('News (news)')
+            ->expectsOutput('Checks: 8 | OK: 7 | Failed: 1')
+            ->assertFailed();
+    }
+
+    public function test_an_iblock_with_no_records_does_not_stop_the_spot_check_of_the_next(): void
+    {
+        $this->migrate();
+        $this->bitrix()->table('b_iblock_element')->where('IBLOCK_ID', 1)->delete();
+
+        $this->artisan('atrium:bitrix:verify', ['--iblock' => [1, 2], '--hlblock' => [9]])
+            ->expectsOutput('  Products (products): checking 3 records...')
+            ->doesntExpectOutputToContain('News (news)')
+            ->assertFailed();
+    }
+
+    public function test_a_link_table_that_is_missing_does_not_hide_the_next_one(): void
+    {
+        $this->migrate();
+        $this->bitrix()->table('b_iblock_property')->insert([
+            'ID' => 50, 'IBLOCK_ID' => 2, 'NAME' => 'Accessories', 'CODE' => 'ACCESSORIES', 'PROPERTY_TYPE' => 'E',
+            'MULTIPLE' => 'Y', 'SORT' => 1, 'LINK_IBLOCK_ID' => 2,
+        ]);
+
+        $this->artisan('atrium:bitrix:verify', ['--iblock' => [2], '--hlblock' => [9], '--sample' => 0])
+            ->expectsTable(['#', 'Table', 'Bitrix', 'Laravel', 'Match'], [
+                [1, 'products_accessories', '?', 'NOT FOUND', 'ERROR'],
+                [2, 'products_related', 2, 2, 'OK'],
+            ])
+            ->assertFailed();
     }
 
     public function test_every_difference_is_found_and_detailed_when_verbose(): void
@@ -205,7 +337,7 @@ final class VerifyDataCommandTest extends SyntheticTestCase
             $t->dropColumn(['preview_picture', 'detail_picture']);
         });
 
-        $this->artisan('atrium:bitrix:verify', ['--iblock' => [2, 1], '--hlblock' => [9], '--sample' => 0, '--check-files' => true])
+        $this->artisan('atrium:bitrix:verify', ['--iblock' => [1, 2], '--hlblock' => [9], '--sample' => 0, '--check-files' => true])
             ->doesntExpectOutput('=== Record spot check ===')
             ->expectsOutput('  products: 2 files not found')
             ->doesntExpectOutputToContain('  news:')
@@ -258,10 +390,9 @@ final class VerifyDataCommandTest extends SyntheticTestCase
         $command = $this->command(OutputInterface::VERBOSITY_NORMAL);
 
         $this->assertSame([1, 'x', '?', 3, 'ERROR', '-'], $this->invoke($command, 'makeCountRow', 1, 'x', '?', 3));
-        $this->assertSame([2, 'y', 3, 3, 'ERROR', '-'], $this->invoke($command, 'makeCountRow', 2, 'y', 3, 3, false), 'forced');
         $this->assertSame([3, 'z', 3, 3, 'OK', 0], $this->invoke($command, 'makeCountRow', 3, 'z', 3, 3, true));
         $this->assertSame([4, 'p', 2, 'n/a', 'ERROR'], $this->invoke($command, 'makePivotRow', 4, 'p', 2, 'n/a'));
-        $this->assertSame([4, 1, 3], [$this->read($command, 'totalChecks'), $this->read($command, 'passedChecks'), $this->read($command, 'failedChecks')]);
+        $this->assertSame([3, 1, 2], [$this->read($command, 'totalChecks'), $this->read($command, 'passedChecks'), $this->read($command, 'failedChecks')]);
     }
 
     public function test_the_sample_keeps_the_first_and_last_ids(): void
@@ -278,12 +409,78 @@ final class VerifyDataCommandTest extends SyntheticTestCase
         $this->assertSame([1, 5], array_slice($three, 0, 2));
         $this->assertContains($three[2], [2, 3, 4]);
 
+        mt_srand(7);
+        $picked = [];
+        foreach (range(1, 120) as $round) {
+            $sample = $this->invoke($command, 'pickSampleIds', [1, 2, 3, 4, 5], 3);
+            $this->assertSame([1, 5], array_slice($sample, 0, 2));
+            $this->assertNotContains($sample[2], [1, 5]);
+            $picked[$sample[2]] = $sample[2];
+        }
+        ksort($picked);
+        $this->assertSame([2 => 2, 3 => 3, 4 => 4], $picked, 'every middle id can be picked');
+
         $four = $this->invoke($command, 'pickSampleIds', $ids, 4);
         $this->assertCount(4, $four);
         $this->assertSame([1, 10], array_slice($four, 0, 2));
         $this->assertSame($four, array_unique($four));
         $this->assertSame([], array_diff($four, range(1, 10)));
         $this->assertSame([], array_intersect(array_slice($four, 2), [1, 10]), 'the middle comes from the middle');
+    }
+
+    public function test_a_record_with_nothing_set_equals_a_row_with_nothing_set(): void
+    {
+        $command = $this->command(OutputInterface::VERBOSITY_NORMAL);
+        $products = $this->invoke($command, 'getIBlockAnalyzer')->analyze(2);
+
+        $this->assertSame([], $this->invoke($command, 'compareBaseFields', [], [], $products), 'defaults: sort 500, active');
+    }
+
+    public function test_numbers_are_compared_as_numbers_whatever_the_driver_returns(): void
+    {
+        $command = $this->command(OutputInterface::VERBOSITY_NORMAL);
+        $products = $this->invoke($command, 'getIBlockAnalyzer')->analyze(2);
+
+        $this->assertSame([], $this->invoke($command, 'compareBaseFields', ['SORT' => '100', 'IBLOCK_SECTION_ID' => '2'], ['sort' => 100, 'section_id' => 2], $products), 'Bitrix gives text');
+        $this->assertSame([], $this->invoke($command, 'compareBaseFields', ['SORT' => 100, 'IBLOCK_SECTION_ID' => 2], ['sort' => '100', 'section_id' => '2'], $products), 'Laravel gives text');
+        $this->assertSame(['sort' => ['bitrix' => 100, 'laravel' => 500]], $this->invoke($command, 'compareBaseFields', ['SORT' => 100, 'IBLOCK_SECTION_ID' => 2], ['sort' => null, 'section_id' => 2], $products), 'an empty sort is 500');
+        $this->assertSame(['sort' => ['bitrix' => 500, 'laravel' => 100]], $this->invoke($command, 'compareBaseFields', [], ['sort' => 100], $products), 'a missing SORT is 500');
+    }
+
+    public function test_the_section_is_compared_only_when_the_iblock_has_sections_and_the_row_a_column_for_it(): void
+    {
+        $command = $this->command(OutputInterface::VERBOSITY_NORMAL);
+        $analyzer = $this->invoke($command, 'getIBlockAnalyzer');
+        $element = ['IBLOCK_SECTION_ID' => 2];
+
+        $this->assertSame(['section_id' => ['bitrix' => 2, 'laravel' => 'null']], $this->invoke($command, 'compareBaseFields', $element, ['section_id' => null], $analyzer->analyze(2)));
+        $this->assertSame([], $this->invoke($command, 'compareBaseFields', $element, ['section_id' => 5], $analyzer->analyze(1)), 'no sections in the iblock');
+        $this->assertSame([], $this->invoke($command, 'compareBaseFields', $element, [], $analyzer->analyze(2)), 'no column for it');
+    }
+
+    public function test_texts_are_compared_without_the_spaces_around_and_shown_up_to_fifty_characters(): void
+    {
+        $command = $this->command(OutputInterface::VERBOSITY_NORMAL);
+        $products = $this->invoke($command, 'getIBlockAnalyzer')->analyze(2);
+
+        $this->assertSame([], $this->invoke($command, 'compareBaseFields', ['PREVIEW_TEXT' => "  text\n", 'DETAIL_TEXT' => '   '], ['preview_text' => 'text', 'detail_text' => ''], $products));
+        $this->assertSame([], $this->invoke($command, 'compareBaseFields', ['PREVIEW_TEXT' => 'text', 'DETAIL_TEXT' => ''], ['preview_text' => "\ttext ", 'detail_text' => '  '], $products));
+        $this->assertSame(
+            ['preview_text' => ['bitrix' => str_repeat('y', 50).'...', 'laravel' => str_repeat('x', 50)]],
+            $this->invoke($command, 'compareBaseFields', ['PREVIEW_TEXT' => str_repeat('y', 51)], ['preview_text' => str_repeat('x', 50)], $products),
+        );
+    }
+
+    public function test_a_file_path_with_a_leading_slash_is_looked_up_under_public(): void
+    {
+        $this->migrate();
+        SyntheticBitrix::writeUploads($this->workDir.'/public');
+        DB::table('products')->where('id', 1)->update(['preview_picture' => '/'.DB::table('products')->where('id', 1)->value('preview_picture')]);
+
+        $this->artisan('atrium:bitrix:verify', ['--iblock' => [2], '--hlblock' => [9], '--sample' => 0, '--check-files' => true])
+            ->expectsOutput('  products: all files present')
+            ->expectsOutput('  Total file references: 2, missing: 0')
+            ->assertSuccessful();
     }
 
     private function tamper(): void
