@@ -71,10 +71,10 @@ class SyncDataCommand extends MigrateDataCommand
 
         $this->report = [];
         $this->jsonColumnsCache = [];
-        $this->audit = (bool) $this->option('audit');
-        $this->dryRun = $this->audit || (bool) $this->option('dry-run');
+        $this->audit = $this->option('audit');
+        $this->dryRun = $this->audit || $this->option('dry-run');
         $this->chunkSize = (int) $this->option('chunk');
-        $this->skipFiles = (bool) $this->option('skip-files');
+        $this->skipFiles = $this->option('skip-files');
 
         if ($this->audit) {
             $this->warn('Full audit: checking all elements, not only those fresh in Bitrix.');
@@ -131,14 +131,11 @@ class SyncDataCommand extends MigrateDataCommand
     /**
      * All Bitrix iblocks, unless narrowed down by an option.
      *
-     * @return array<int, int>
+     * @return array<int, int|string>
      */
     private function allIBlockIds(): array
     {
-        return array_map(
-            static fn (array $row): int => (int) $row['ID'],
-            $this->getBitrixConnection()->getIBlocks()
-        );
+        return array_column($this->getBitrixConnection()->getIBlocks(), 'ID');
     }
 
     private function syncSections(IBlock $iblock): void
@@ -155,7 +152,7 @@ class SyncDataCommand extends MigrateDataCommand
         $added = $updated = $same = 0;
 
         foreach ($sections as $section) {
-            $id = (int) $section['ID'];
+            $id = $section['ID'];
             $data = [
                 'id' => $id,
                 'bitrix_id' => $id,
@@ -244,8 +241,8 @@ class SyncDataCommand extends MigrateDataCommand
             }
 
             foreach ($elements as $element) {
-                $id = (int) $element['ID'];
-                $seen[$id] = true;
+                $id = $element['ID'];
+                $seen[] = $id;
 
                 if (! isset($existing[$id])) {
                     $data = $this->transformElement($element, $iblock);
@@ -291,7 +288,7 @@ class SyncDataCommand extends MigrateDataCommand
             $offset += $this->chunkSize;
         }
 
-        $missing = array_values(array_diff(array_keys($existing), array_keys($seen)));
+        $missing = array_diff(array_keys($existing), $seen);
 
         foreach ($missing as $id) {
             $name = $existing[$id]->name ?? '';
@@ -323,11 +320,7 @@ class SyncDataCommand extends MigrateDataCommand
             return false;
         }
 
-        if (empty($localUpdatedAt)) {
-            return true;
-        }
-
-        return strtotime((string) $bitrixTimestamp) > strtotime((string) $localUpdatedAt);
+        return empty($localUpdatedAt) || strtotime((string) $bitrixTimestamp) > strtotime((string) $localUpdatedAt);
     }
 
     /**
@@ -404,34 +397,20 @@ class SyncDataCommand extends MigrateDataCommand
         // MySQL returns JSON in its own formatting (`["a", "b"]`) while
         // json_encode writes it without spaces, so a literal comparison would
         // flag everything stored in json columns as changed.
-        $newJson = $this->asJson($new);
-        $oldJson = $this->asJson($old);
-
-        if ($newJson !== null && $oldJson !== null) {
-            return $newJson !== $oldJson;
-        }
+        $new = $this->asJson($new) ?? $new;
+        $old = $this->asJson($old) ?? $old;
 
         if (is_numeric($new) && is_numeric($old)) {
-            return abs((float) $new - (float) $old) > 0.000001;
+            return abs($new - $old) > 0.000001;
         }
 
-        $newTime = $this->asTimestamp($new);
-        $oldTime = $this->asTimestamp($old);
-
-        if ($newTime !== null && $oldTime !== null) {
-            return $newTime !== $oldTime;
-        }
-
-        return $new !== $old;
+        // A date is compared as a moment, a text as a text: the two never match.
+        return ($this->asTimestamp($new) ?? $new) !== ($this->asTimestamp($old) ?? $old);
     }
 
     /** An empty string and NULL are the same for us, otherwise we get false differences. */
     private function normalize(mixed $value): ?string
     {
-        if ($value === null) {
-            return null;
-        }
-
         if (is_bool($value)) {
             return $value ? '1' : '0';
         }
@@ -493,9 +472,7 @@ class SyncDataCommand extends MigrateDataCommand
      */
     private function missingLocally(array $existing, array $bitrixRows): array
     {
-        $bitrixIds = array_map(static fn (array $row): int => (int) $row['ID'], $bitrixRows);
-
-        return array_values(array_diff(array_keys($existing), $bitrixIds));
+        return array_diff(array_keys($existing), array_column($bitrixRows, 'ID'));
     }
 
     /**
