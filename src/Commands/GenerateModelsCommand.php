@@ -14,6 +14,7 @@ use Atrium\Bitrix\Generators\ReferenceModelGenerator;
 use Atrium\Bitrix\Generators\SectionModelGenerator;
 use Atrium\Bitrix\Mappers\FieldTypeMapper;
 use Atrium\Bitrix\Mappers\PropertyTypeMapper;
+use Illuminate\Support\Facades\File;
 
 class GenerateModelsCommand extends AbstractBitrixCommand
 {
@@ -69,7 +70,7 @@ class GenerateModelsCommand extends AbstractBitrixCommand
     /**
      * Initialize generators
      */
-    protected function initializeGenerators(): void
+    private function initializeGenerators(): void
     {
         $naming = $this->getNaming();
         $typeMapper = new PropertyTypeMapper;
@@ -88,7 +89,7 @@ class GenerateModelsCommand extends AbstractBitrixCommand
     /**
      * Generate models for IBlocks
      */
-    protected function generateIBlockModels(array $iblockIds, bool $dryRun): void
+    private function generateIBlockModels(array $iblockIds, bool $dryRun): void
     {
         $this->info('Generating IBlock models...');
 
@@ -129,7 +130,7 @@ class GenerateModelsCommand extends AbstractBitrixCommand
     /**
      * Generate model for single IBlock
      */
-    protected function generateIBlockModel($iblock, bool $dryRun): void
+    private function generateIBlockModel($iblock, bool $dryRun): void
     {
         $naming = $this->getNaming();
 
@@ -151,7 +152,7 @@ class GenerateModelsCommand extends AbstractBitrixCommand
     /**
      * Generate models for Highload Blocks
      */
-    protected function generateHlblockModels(array $hlblockIds, bool $dryRun): void
+    private function generateHlblockModels(array $hlblockIds, bool $dryRun): void
     {
         $this->info('Generating Highload Block models...');
 
@@ -172,7 +173,7 @@ class GenerateModelsCommand extends AbstractBitrixCommand
     /**
      * Generate reference model
      */
-    protected function generateReferenceModel($hlblock, bool $dryRun): void
+    private function generateReferenceModel($hlblock, bool $dryRun): void
     {
         $naming = $this->getNaming();
 
@@ -185,7 +186,7 @@ class GenerateModelsCommand extends AbstractBitrixCommand
     /**
      * Output model (write or display)
      */
-    protected function outputModel(string $type, string $name, string $path, string $content, bool $dryRun): void
+    private function outputModel(string $type, string $name, string $path, string $content, bool $dryRun): void
     {
         if ($dryRun) {
             $this->line("  Would create {$type} model: {$name}");
@@ -209,11 +210,7 @@ class GenerateModelsCommand extends AbstractBitrixCommand
             }
         }
 
-        // Ensure directory exists
-        $directory = dirname($path);
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
+        File::ensureDirectoryExists(dirname($path));
 
         // Write file
         file_put_contents($path, $content);

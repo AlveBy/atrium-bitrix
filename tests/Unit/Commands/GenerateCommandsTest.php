@@ -380,6 +380,102 @@ final class GenerateCommandsTest extends SyntheticTestCase
         $this->assertStringContainsString('class News extends Model', (string) file_get_contents($this->workDir.'/models/News.php'));
     }
 
+    public function test_the_dry_run_report_of_models_is_laid_out_with_blank_lines_between_its_parts(): void
+    {
+        $expected = <<<'TXT'
+        Bitrix Model Generator
+        ======================
+
+        Generating IBlock models...
+          Would create Element model: News
+          Path: WORK/models/News.php
+          Would create Element model: Product
+          Path: WORK/models/Product.php
+          Would create Section model: ProductSection
+          Path: WORK/models/ProductSection.php
+
+        Generating linked directory models...
+          Would create Reference model: Brands
+          Path: WORK/models/References/Brands.php
+        Generating Highload Block models...
+          Would create Reference model: Brands
+          Path: WORK/models/References/Brands.php
+
+        Model generation complete!
+
+        TXT;
+
+        $this->assertSame($expected, $this->transcript('atrium:bitrix:generate:models', [
+            '--dry-run' => true, '--iblock' => [1, 2], '--hlblock' => [1],
+        ]));
+    }
+
+    public function test_the_written_report_of_models_names_each_file(): void
+    {
+        $expected = <<<'TXT'
+        Bitrix Model Generator
+        ======================
+
+        Generating IBlock models...
+          Created: News
+          Path: WORK/models/News.php
+        Generating Highload Block models...
+        Highload Block 99 not found
+
+        Model generation complete!
+
+        TXT;
+
+        $this->assertSame($expected, $this->transcript('atrium:bitrix:generate:models', [
+            '--force' => true, '--iblock' => [1], '--hlblock' => [99],
+        ]));
+    }
+
+    public function test_a_verbose_dry_run_sets_the_code_of_each_model_apart_by_blank_lines(): void
+    {
+        $out = $this->transcript('atrium:bitrix:generate:models', [
+            '--dry-run' => true, '-v' => true, '--iblock' => [1], '--hlblock' => [99],
+        ]);
+
+        $this->assertStringContainsString("  Path: WORK/models/News.php\n\n<?php\n\ndeclare(strict_types=1);\n", $out);
+        $this->assertStringContainsString("}\n\n\nGenerating Highload Block models...\n", $out);
+    }
+
+    public function test_a_model_is_written_for_the_directory_an_iblock_links_to(): void
+    {
+        $this->artisan('atrium:bitrix:generate:models', ['--force' => true, '--iblock' => [2], '--hlblock' => [99]])
+            ->expectsOutput('Generating linked directory models...')
+            ->expectsOutput('  Created: Brands')
+            ->assertSuccessful();
+
+        $this->assertSame(['Product.php', 'ProductSection.php', 'References/Brands.php'], $this->generatedFiles('models'));
+    }
+
+    public function test_a_model_block_that_is_missing_or_skipped_does_not_stop_the_ones_after_it(): void
+    {
+        config(['atrium-bitrix.skip_iblocks' => [2]]);
+
+        $this->artisan('atrium:bitrix:generate:models', ['--dry-run' => true, '--iblock' => [99, 2, 1], '--hlblock' => [98, 1]])
+            ->expectsOutput('IBlock 99 not found')
+            ->expectsOutput('Skipping IBlock 2 (in skip list)')
+            ->expectsOutput('  Would create Element model: News')
+            ->expectsOutput('Highload Block 98 not found')
+            ->expectsOutput('  Would create Reference model: Brands')
+            ->assertSuccessful();
+    }
+
+    public function test_a_directory_named_with_another_prefix_gets_its_model_from_the_blocks_read_up_front(): void
+    {
+        $this->bitrix()->table('b_iblock_property')->where('CODE', 'BRAND')->update([
+            'USER_TYPE_SETTINGS' => serialize(['size' => 1, 'TABLE_NAME' => 'theme_hlbd_brands']),
+        ]);
+
+        $this->artisan('atrium:bitrix:generate:models', ['--dry-run' => true, '--iblock' => [2], '--hlblock' => [99]])
+            ->expectsOutput('Generating linked directory models...')
+            ->expectsOutput('  Would create Reference model: Brands')
+            ->assertSuccessful();
+    }
+
     public function test_an_existing_model_is_overwritten_only_when_confirmed(): void
     {
         $news = $this->workDir.'/models/News.php';
