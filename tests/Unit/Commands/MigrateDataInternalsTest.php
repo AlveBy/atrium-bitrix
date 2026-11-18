@@ -12,6 +12,7 @@ namespace Atrium\Bitrix\Tests\Unit\Commands;
 use Atrium\Bitrix\Commands\MigrateDataCommand;
 use Atrium\Bitrix\Schema\IBlockProperty;
 use Atrium\Bitrix\Schema\IBlockPropertyEnum;
+use Atrium\Bitrix\Support\BitrixConnection;
 use Atrium\Bitrix\Tests\Fixtures\SyntheticBitrix;
 use Atrium\Bitrix\Tests\SyntheticTestCase;
 use Illuminate\Console\OutputStyle;
@@ -51,6 +52,11 @@ final class MigrateDataInternalsTest extends SyntheticTestCase
     private function set(object $command, string $property, mixed $value): void
     {
         (fn () => $this->{$property} = $value)->call($command);
+    }
+
+    private function read(object $command, string $property): mixed
+    {
+        return (fn () => $this->{$property})->call($command);
     }
 
     /**
@@ -106,6 +112,11 @@ final class MigrateDataInternalsTest extends SyntheticTestCase
         yield 'empty array' => [[], null];
         yield 'array of numbers and text' => [[1, 'x'], '[1,"x"]'];
         yield 'array of serialized values' => [['a:1:{i:0;s:1:"x";}', 'plain', 's:3:"abc";'], '[["x"],"plain","abc"]'];
+        yield 'an array with keys keeps them' => [['k' => 'v'], '{"k":"v"}'];
+        yield 'an array with keys loses them once a value is unserialized' => [['k' => 'i:7;', 'j' => 'x'], '[7,"x"]'];
+        yield 'a number next to a serialized value' => [[1, 'i:7;'], '[1,7]'];
+        yield 'a text that unserializes but does not look serialized' => ['N;', 'N;'];
+        yield 'such a text next to a serialized value' => [['N;', 'i:7;'], '["N;",7]'];
         yield 'serialized values after a plain one' => [['plain', 'i:7;'], '["plain",7]'];
         yield 'array with a broken and a false value' => [['s:9:"broken', 'b:0;'], '["s:9:\"broken",false]'];
     }
@@ -286,17 +297,20 @@ final class MigrateDataInternalsTest extends SyntheticTestCase
 
     public function test_a_file_already_in_public_upload_is_used_where_it_is(): void
     {
+        $this->app->useStoragePath($this->workDir.'/storage');
         SyntheticBitrix::writeUploads($this->workDir.'/public');
-        config(['atrium-bitrix.upload_path' => $this->workDir.'/source']);
+        SyntheticBitrix::writeUploads($this->workDir.'/source');
+        config(['atrium-bitrix.upload_path' => $this->workDir.'/source/upload']);
 
         $this->assertSame('/upload/iblock/g4h/hardware.png', $this->invoke($this->command(), 'migrateFile', 4));
-        $this->assertDirectoryDoesNotExist($this->workDir.'/storage');
+        $this->assertDirectoryDoesNotExist($this->workDir.'/storage/app');
     }
 
     public function test_a_file_from_the_upload_path_is_copied_to_storage(): void
     {
         $this->app->useStoragePath($this->workDir.'/storage');
         SyntheticBitrix::writeUploads($this->workDir.'/source');
+        mkdir($this->workDir.'/public/upload', 0777, true);
         config(['atrium-bitrix.upload_path' => $this->workDir.'/source/upload']);
         $command = $this->command();
 
@@ -386,7 +400,127 @@ final class MigrateDataInternalsTest extends SyntheticTestCase
 
         $this->invoke($command, 'migrateSections', $iblock);
 
-        $this->assertStringContainsString('Migrating sections: Products -> product_sections', $this->output->fetch());
+        $this->assertSame("\nMigrating sections: Products -> product_sections\n  No sections to migrate\n", $this->output->fetch());
+    }
+
+    public function test_rows_are_read_in_chunks_that_start_at_the_beginning_and_stop_at_the_end(): void
+    {
+        $this->generateSchema();
+        $command = $this->command();
+        $this->set($command, 'chunkSize', 1);
+        $connection = new class('bitrix') extends BitrixConnection
+        {
+            /** @var list<string> */
+            public array $reads = [];
+
+            public function getHighloadBlockData(string $tableName, int $limit, int $offset): array
+            {
+                $this->reads[] = "{$tableName}:{$limit}:{$offset}";
+
+                return parent::getHighloadBlockData($tableName, $limit, $offset);
+            }
+
+            public function getIBlockElements(int $iblockId, int $limit, int $offset): array
+            {
+                $this->reads[] = "iblock{$iblockId}:{$limit}:{$offset}";
+
+                return parent::getIBlockElements($iblockId, $limit, $offset);
+            }
+        };
+        $this->set($command, 'bitrixConnection', $connection);
+
+        $this->invoke($command, 'migrateHlblocks', [1]);
+        $this->set($command, 'chunkSize', 3);
+        $this->invoke($command, 'migrateElements', $this->invoke($command, 'getIBlockAnalyzer')->analyze(2));
+
+        $this->assertSame(['b_hlbd_brands:1:0', 'b_hlbd_brands:1:1', 'iblock2:3:0'], $connection->reads);
+        $this->assertSame(2, DB::table('brands')->count());
+        $this->assertSame(3, DB::table('products')->count());
+    }
+
+    public function test_only_elements_with_link_tables_are_set_aside_for_their_links(): void
+    {
+        $this->bitrix()->table('b_iblock_property')->insert([
+            'ID' => 24, 'IBLOCK_ID' => 2, 'NAME' => 'Also in', 'CODE' => 'SECTIONS_EXTRA', 'PROPERTY_TYPE' => 'G',
+            'SORT' => 900, 'MULTIPLE' => 'Y', 'LINK_IBLOCK_ID' => 2,
+        ]);
+        $command = $this->command();
+        $analyzer = $this->invoke($command, 'getIBlockAnalyzer');
+        $products = $analyzer->analyze(2);
+
+        $this->invoke($command, 'deferLinks', $products, 'products', 1);
+        $this->invoke($command, 'deferLinks', $products, 'products', 2);
+
+        $this->assertSame([2 => ['iblock' => $products, 'table' => 'products', 'ids' => [1, 2]]], $this->read($command, 'deferredLinks'), 'once per element, however many link properties');
+
+        $this->bitrix()->table('b_iblock_property')->where('ID', 2)->delete();
+        $this->invoke($command, 'deferLinks', $analyzer->analyze(1), 'news', 4);
+
+        $this->assertSame([2], array_keys($this->read($command, 'deferredLinks')), 'no link property, nothing to write later');
+    }
+
+    public function test_sections_and_elements_get_their_defaults_where_bitrix_has_no_value(): void
+    {
+        $this->generateSchema();
+        $command = $this->command();
+        $products = $this->invoke($command, 'getIBlockAnalyzer')->analyze(2);
+        $this->set($command, 'bitrixConnection', new class('bitrix') extends BitrixConnection
+        {
+            public function getIBlockSections(int $iblockId): array
+            {
+                return [
+                    ['ID' => 11, 'IBLOCK_SECTION_ID' => null, 'NAME' => 'Bare', 'CODE' => 'bare', 'DESCRIPTION' => null],
+                    ['ID' => 12, 'IBLOCK_SECTION_ID' => 11, 'NAME' => 'Full', 'CODE' => 'full', 'DESCRIPTION' => 'd', 'SORT' => 7, 'ACTIVE' => 'N', 'DEPTH_LEVEL' => 2, 'LEFT_MARGIN' => 3, 'RIGHT_MARGIN' => 4],
+                ];
+            }
+        });
+
+        $this->invoke($command, 'migrateSections', $products);
+
+        $rows = DB::table('product_sections')->orderBy('id')->get(['id', 'bitrix_id', 'parent_id', 'sort', 'active', 'depth', 'left_margin', 'right_margin'])
+            ->map(fn (object $row): array => array_map(intval(...), (array) $row))->all();
+        $this->assertSame([
+            ['id' => 11, 'bitrix_id' => 11, 'parent_id' => 0, 'sort' => 500, 'active' => 1, 'depth' => 0, 'left_margin' => 0, 'right_margin' => 0],
+            ['id' => 12, 'bitrix_id' => 12, 'parent_id' => 11, 'sort' => 7, 'active' => 0, 'depth' => 2, 'left_margin' => 3, 'right_margin' => 4],
+        ], $rows);
+
+        $bare = ['ID' => 9, 'IBLOCK_SECTION_ID' => null, 'NAME' => 'N', 'CODE' => 'n', 'PREVIEW_TEXT' => null, 'DETAIL_TEXT' => null, 'DATE_CREATE' => null, 'TIMESTAMP_X' => null];
+        $data = $this->invoke($command, 'transformElement', $bare, $products);
+        $this->assertSame([500, true, 'text', 'text'], [$data['sort'], $data['active'], $data['preview_text_type'], $data['detail_text_type']]);
+        $this->assertEqualsWithDelta(time(), strtotime((string) $data['created_at']), 5, 'no date: now');
+        $this->assertEqualsWithDelta(time(), strtotime((string) $data['updated_at']), 5);
+
+        $full = [...$bare, 'SORT' => 3, 'ACTIVE' => 'N', 'PREVIEW_TEXT_TYPE' => 'html', 'DETAIL_TEXT_TYPE' => 'html', 'DATE_CREATE' => '2020-01-02 03:04:05', 'TIMESTAMP_X' => '2021-02-03 04:05:06'];
+        $data = $this->invoke($command, 'transformElement', $full, $products);
+        $this->assertSame([3, false, 'html', 'html', '2020-01-02 03:04:05', '2021-02-03 04:05:06'], [$data['sort'], $data['active'], $data['preview_text_type'], $data['detail_text_type'], $data['created_at'], $data['updated_at']]);
+    }
+
+    public function test_a_highload_row_keeps_its_id_and_reads_flags_of_every_kind(): void
+    {
+        $this->bitrix()->table('b_user_field')->insert(['ID' => 6, 'ENTITY_ID' => 'HLBLOCK_1', 'FIELD_NAME' => 'UF_ACTIVE', 'USER_TYPE_ID' => 'boolean', 'SORT' => 400, 'MULTIPLE' => 'N']);
+        $command = $this->command();
+        $brands = $this->invoke($command, 'getHlblockAnalyzer')->analyze(1);
+
+        $this->assertSame(['id' => 7], $this->invoke($command, 'transformHlblockRow', ['ID' => 7], $brands));
+        $this->assertSame(['id' => 7, 'name' => 'X', 'active' => true], $this->invoke($command, 'transformHlblockRow', ['ID' => 7, 'UF_NAME' => 'X', 'UF_ACTIVE' => true], $brands));
+
+        foreach ([['Y', true], ['1', true], [1, true], ['N', false], [0, false], [false, false]] as [$stored, $expected]) {
+            $this->assertSame($expected, $this->invoke($command, 'transformHlblockRow', ['ID' => 7, 'UF_ACTIVE' => $stored], $brands)['active'], var_export($stored, true));
+        }
+    }
+
+    public function test_the_values_of_a_version_one_element_are_found_by_property_and_the_unknown_are_left_out(): void
+    {
+        $this->bitrix()->table('b_iblock_element_property')->insert([
+            ['ID' => 10, 'IBLOCK_PROPERTY_ID' => 2, 'IBLOCK_ELEMENT_ID' => 4, 'VALUE' => '2'],
+            ['ID' => 11, 'IBLOCK_PROPERTY_ID' => 99, 'IBLOCK_ELEMENT_ID' => 4, 'VALUE' => 'orphan'],
+            ['ID' => 12, 'IBLOCK_PROPERTY_ID' => 2, 'IBLOCK_ELEMENT_ID' => 4, 'VALUE' => '1'],
+        ]);
+        $command = $this->command();
+        $news = $this->invoke($command, 'getIBlockAnalyzer')->analyze(1);
+
+        $this->assertSame(['SOURCE' => 'Press office', 'LINK_GOODS' => ['2', '1']], $this->invoke($command, 'getPropertyValuesV1', 4, $news));
+        $this->assertSame([], $this->invoke($command, 'getPropertyValuesV1', 77, $news));
     }
 
     public function test_the_given_ids_pick_the_blocks_without_asking(): void

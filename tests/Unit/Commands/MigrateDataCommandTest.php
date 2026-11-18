@@ -11,8 +11,10 @@ namespace Atrium\Bitrix\Tests\Unit\Commands;
 
 use Atrium\Bitrix\Tests\SyntheticTestCase;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Symfony\Component\Console\Output\BufferedOutput;
 
 /**
  * migrate:data beyond the full run: blocks that are missing, skipped or
@@ -34,6 +36,68 @@ final class MigrateDataCommandTest extends SyntheticTestCase
             ->doesntExpectOutputToContain('Migrating elements')
             ->doesntExpectOutputToContain('Migrating: ')
             ->assertSuccessful();
+    }
+
+    public function test_a_run_is_reported_step_by_step(): void
+    {
+        $this->generateSchema();
+        $output = new BufferedOutput;
+
+        Artisan::call('atrium:bitrix:migrate:data', ['--hlblock' => [1], '--iblock' => [2], '--force' => true, '--chunk' => 2], $output);
+
+        $this->assertSame(<<<'TEXT'
+Bitrix Data Migration
+=====================
+
+Migrating Highload Block data...
+
+Migrating: Brands -> brands
+  Records to migrate: 2
+ 0/2 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0%
+ 2/2 [▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓] 100%
+Migrating IBlock data...
+
+Migrating sections: Products -> product_sections
+  Sections to migrate: 3
+ 0/3 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0%
+ 3/3 [▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓] 100%
+
+Migrating elements: Products -> products
+  Elements to migrate: 3
+ 0/3 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0%
+ 3/3 [▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓] 100%
+
+Data migration complete!
+
+TEXT, $output->fetch());
+    }
+
+    public function test_a_block_that_is_missing_skipped_or_empty_does_not_stop_the_ones_after_it(): void
+    {
+        config(['atrium-bitrix.skip_iblocks' => [1]]);
+        $this->bitrix()->table('b_hlblock_entity')->insert(['ID' => 2, 'NAME' => 'Colors', 'TABLE_NAME' => 'b_hlbd_colors']);
+        $this->generateSchema();
+
+        $this->artisan('atrium:bitrix:migrate:data', ['--hlblock' => [9, 2, 1], '--iblock' => [1, 99, 2], '--force' => true])
+            ->expectsOutput('Highload Block 9 not found')
+            ->expectsOutput('  No data to migrate')
+            ->expectsOutput('Migrating: Brands -> brands')
+            ->expectsOutput('Skipping IBlock 1 (in skip list)')
+            ->expectsOutput('IBlock 99 not found')
+            ->expectsOutput('Migrating elements: Products -> products')
+            ->assertSuccessful();
+
+        $this->assertSame(2, DB::table('brands')->count());
+        $this->assertSame(3, DB::table('products')->count());
+    }
+
+    public function test_a_row_that_cannot_be_written_ends_the_progress_line_before_its_message(): void
+    {
+        $output = new BufferedOutput;
+
+        Artisan::call('atrium:bitrix:migrate:data', ['--hlblock' => [1], '--iblock' => [99], '--force' => true, '--chunk' => 5], $output);
+
+        $this->assertMatchesRegularExpression('/\n 0\/2 \[░+\]   0%\n  Error inserting row 1: [^\n]*\n\n  Error inserting row 2: [^\n]*\n\n 2\/2 \[▓+\] 100%\n/u', $output->fetch());
     }
 
     public function test_an_iblock_outside_the_skip_list_is_migrated(): void
@@ -155,6 +219,31 @@ final class MigrateDataCommandTest extends SyntheticTestCase
         $this->assertSame(3, DB::table('products')->count());
     }
 
+    public function test_an_element_or_a_section_that_cannot_be_written_ends_the_progress_line_before_its_message(): void
+    {
+        $this->skipOnPostgres();
+        $this->generateSchema();
+        $this->artisan('atrium:bitrix:migrate:data', ['--hlblock' => [9], '--iblock' => [1, 2], '--force' => true])->assertSuccessful();
+        $output = new BufferedOutput;
+
+        Artisan::call('atrium:bitrix:migrate:data', ['--hlblock' => [9], '--iblock' => [1, 2], '--force' => true], $output);
+        $text = $output->fetch();
+
+        $this->assertMatchesRegularExpression('/ 0\/3 \[░+\]   0%\n  Error inserting section 1: [^\n]*\n\n  Error inserting section 2: [^\n]*\n\n  Error inserting section 3: [^\n]*\n\n 3\/3 \[▓+\] 100%\n/u', $text);
+        $this->assertMatchesRegularExpression('/ 0\/2 \[░+\]   0%\n  Error inserting element 4: [^\n]*\n\n  Error inserting element 5: [^\n]*\n\n 2\/2 \[▓+\] 100%\n/u', $text);
+    }
+
+    public function test_a_link_to_a_record_that_is_not_there_is_written_all_the_same(): void
+    {
+        $this->skipOnPostgres();
+        $this->bitrix()->table('b_iblock_element_prop_m2')->insert(['ID' => 7, 'IBLOCK_ELEMENT_ID' => 3, 'IBLOCK_PROPERTY_ID' => 17, 'VALUE' => '99']);
+        $this->generateSchema();
+
+        $this->artisan('atrium:bitrix:migrate:data', ['--hlblock' => [1], '--iblock' => [2], '--force' => true])->assertSuccessful();
+
+        $this->assertSame(1, DB::table('products_related')->where('product_id', 3)->where('related_id', 99)->count());
+    }
+
     public function test_pictures_of_sections_and_elements_become_paths(): void
     {
         $this->generateSchema();
@@ -195,7 +284,7 @@ final class MigrateDataCommandTest extends SyntheticTestCase
     public function test_a_property_named_like_a_base_field_does_not_overwrite_it(): void
     {
         $this->bitrix()->table('b_iblock_property')->insert([
-            'ID' => 3, 'IBLOCK_ID' => 1, 'NAME' => 'Sort order', 'CODE' => 'SORT', 'PROPERTY_TYPE' => 'N', 'SORT' => 300, 'MULTIPLE' => 'N',
+            'ID' => 3, 'IBLOCK_ID' => 1, 'NAME' => 'Sort order', 'CODE' => 'SORT', 'PROPERTY_TYPE' => 'N', 'SORT' => 50, 'MULTIPLE' => 'N',
         ]);
         $this->bitrix()->table('b_iblock_element_property')->insert([
             'ID' => 4, 'IBLOCK_PROPERTY_ID' => 3, 'IBLOCK_ELEMENT_ID' => 4, 'VALUE' => '999',
@@ -221,7 +310,7 @@ final class MigrateDataCommandTest extends SyntheticTestCase
             ->assertSuccessful();
 
         $this->assertSame(
-            [['product_id' => 1, 'section_id' => 1, 'sort' => 0], ['product_id' => 1, 'section_id' => 3, 'sort' => 1]],
+            [['product_id' => 1, 'section_id' => 1, 'sort' => 1], ['product_id' => 1, 'section_id' => 3, 'sort' => 2]],
             $this->rows('products_sections_extra', ['product_id', 'section_id', 'sort']),
         );
         $northwind = (int) DB::table('brands')->where('xml_id', 'northwind')->value('id');
@@ -236,6 +325,22 @@ final class MigrateDataCommandTest extends SyntheticTestCase
             $this->rows('products_related', ['product_id', 'related_id']),
             'an empty link is left out',
         );
+    }
+
+    public function test_a_property_without_values_does_not_stop_the_links_of_the_next(): void
+    {
+        $this->bitrix()->table('b_iblock_property')->insert([
+            'ID' => 24, 'IBLOCK_ID' => 2, 'NAME' => 'Accessories', 'CODE' => 'ACCESSORIES', 'PROPERTY_TYPE' => 'E',
+            'SORT' => 1, 'MULTIPLE' => 'Y', 'LINK_IBLOCK_ID' => 2,
+        ]);
+        $this->generateSchema();
+
+        $this->artisan('atrium:bitrix:migrate:data', ['--hlblock' => [1], '--iblock' => [2], '--force' => true])
+            ->doesntExpectOutputToContain('Error inserting')
+            ->assertSuccessful();
+
+        $this->assertSame(0, DB::table('products_accessories')->count());
+        $this->assertSame(2, DB::table('products_related')->count());
     }
 
     public function test_a_link_table_that_cannot_be_written_is_passed_over(): void
@@ -283,13 +388,14 @@ final class MigrateDataCommandTest extends SyntheticTestCase
             ['ID' => 25, 'IBLOCK_ID' => 2, 'NAME' => 'Brands', 'CODE' => 'BRANDS', 'PROPERTY_TYPE' => 'S', 'USER_TYPE' => 'directory', 'SORT' => 910, 'MULTIPLE' => 'Y', 'LINK_IBLOCK_ID' => null, 'USER_TYPE_SETTINGS' => serialize(['TABLE_NAME' => 'b_hlbd_brands'])],
         ]);
         $this->bitrix()->table('b_iblock_element_prop_m2')->insert([
-            ['ID' => 7, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 24, 'VALUE' => '1'],
-            ['ID' => 8, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 24, 'VALUE' => '3'],
-            ['ID' => 9, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 25, 'VALUE' => 'northwind'],
-            ['ID' => 10, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 25, 'VALUE' => 'gone'],
-            ['ID' => 11, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 25, 'VALUE' => 'contoso'],
-            ['ID' => 12, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 25, 'VALUE' => ''],
-            ['ID' => 13, 'IBLOCK_ELEMENT_ID' => 3, 'IBLOCK_PROPERTY_ID' => 17, 'VALUE' => '0'],
+            ['ID' => 7, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 24, 'VALUE' => ''],
+            ['ID' => 8, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 24, 'VALUE' => '1'],
+            ['ID' => 9, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 24, 'VALUE' => '3'],
+            ['ID' => 10, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 25, 'VALUE' => 'northwind'],
+            ['ID' => 11, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 25, 'VALUE' => 'gone'],
+            ['ID' => 12, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 25, 'VALUE' => 'contoso'],
+            ['ID' => 13, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 25, 'VALUE' => ''],
+            ['ID' => 14, 'IBLOCK_ELEMENT_ID' => 3, 'IBLOCK_PROPERTY_ID' => 17, 'VALUE' => '0'],
         ]);
     }
 
