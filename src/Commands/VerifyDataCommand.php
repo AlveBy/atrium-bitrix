@@ -56,19 +56,9 @@ class VerifyDataCommand extends AbstractBitrixCommand
         $this->info('=== Counts ===');
         $this->newLine();
 
-        $countRows = [];
-        $pivotRows = [];
-
-        if (! empty($hlblockIds)) {
-            [$hlCountRows] = $this->verifyHlblockCounts($hlblockIds);
-            $countRows = array_merge($countRows, $hlCountRows);
-        }
-
-        if (! empty($iblockIds)) {
-            [$ibCountRows, $ibPivotRows] = $this->verifyIBlockCounts($iblockIds);
-            $countRows = array_merge($countRows, $ibCountRows);
-            $pivotRows = array_merge($pivotRows, $ibPivotRows);
-        }
+        $hlCountRows = $this->verifyHlblockCounts($hlblockIds);
+        [$ibCountRows, $pivotRows] = $this->verifyIBlockCounts($iblockIds);
+        $countRows = array_merge($hlCountRows, $ibCountRows);
 
         if (! empty($countRows)) {
             $this->table(
@@ -115,10 +105,8 @@ class VerifyDataCommand extends AbstractBitrixCommand
 
     /**
      * Verify Highload Block counts
-     *
-     * @return array{0: array}
      */
-    protected function verifyHlblockCounts(array $hlblockIds): array
+    private function verifyHlblockCounts(array $hlblockIds): array
     {
         $analyzer = $this->getHlblockAnalyzer();
         $connection = $this->getBitrixConnection();
@@ -136,7 +124,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
             $laravelTable = $naming->hlblockToTableName($hlblock->tableName);
 
             if (! Schema::hasTable($laravelTable)) {
-                $countRows[] = $this->makeCountRow($index++, $laravelTable, '?', 'TABLE NOT FOUND', false);
+                $countRows[] = $this->makeCountRow($index++, $laravelTable, '?', 'TABLE NOT FOUND');
 
                 continue;
             }
@@ -147,7 +135,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
             $countRows[] = $this->makeCountRow($index++, $laravelTable, $bitrixCount, $laravelCount);
         }
 
-        return [$countRows];
+        return $countRows;
     }
 
     /**
@@ -155,7 +143,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
      *
      * @return array{0: array, 1: array}
      */
-    protected function verifyIBlockCounts(array $iblockIds): array
+    private function verifyIBlockCounts(array $iblockIds): array
     {
         $analyzer = $this->getIBlockAnalyzer();
         $connection = $this->getBitrixConnection();
@@ -180,7 +168,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
 
             // Element counts
             if (! Schema::hasTable($laravelTable)) {
-                $countRows[] = $this->makeCountRow($countIndex++, $laravelTable, '?', 'TABLE NOT FOUND', false);
+                $countRows[] = $this->makeCountRow($countIndex++, $laravelTable, '?', 'TABLE NOT FOUND');
 
                 continue;
             }
@@ -227,7 +215,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
     /**
      * Spot-check IBlock records
      */
-    protected function spotCheckIBlocks(array $iblockIds, int $sampleSize): void
+    private function spotCheckIBlocks(array $iblockIds, int $sampleSize): void
     {
         $analyzer = $this->getIBlockAnalyzer();
         $connection = $this->getBitrixConnection();
@@ -316,7 +304,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
     /**
      * Compare base fields between Bitrix element and Laravel row
      */
-    protected function compareBaseFields(array $bitrixElement, array $laravelRow, IBlock $iblock): array
+    private function compareBaseFields(array $bitrixElement, array $laravelRow, IBlock $iblock): array
     {
         $mismatches = [];
 
@@ -401,7 +389,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
     /**
      * Check file references exist on disk
      */
-    protected function checkFiles(array $iblockIds): void
+    private function checkFiles(array $iblockIds): void
     {
         $analyzer = $this->getIBlockAnalyzer();
         $naming = $this->getNaming();
@@ -461,7 +449,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
                     $totalFiles++;
 
                     // Check if file exists
-                    $filePath = public_path(ltrim($value, '/'));
+                    $filePath = public_path($value);
                     if (! file_exists($filePath)) {
                         $tableMissing++;
                         $missingFiles++;
@@ -469,7 +457,6 @@ class VerifyDataCommand extends AbstractBitrixCommand
                 }
             }
 
-            $tableTotal = $rows->count() * count($columnsToCheck);
             if ($tableMissing > 0) {
                 $this->warn("  {$laravelTable}: {$tableMissing} files not found");
                 $this->recordCheck(false);
@@ -486,7 +473,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
     /**
      * Pick sample IDs from array: first, last, and random middle ones
      */
-    protected function pickSampleIds(array $allIds, int $sampleSize): array
+    private function pickSampleIds(array $allIds, int $sampleSize): array
     {
         if (count($allIds) <= $sampleSize) {
             return $allIds;
@@ -512,19 +499,15 @@ class VerifyDataCommand extends AbstractBitrixCommand
             }
         }
 
-        return array_unique($sample);
+        return $sample;
     }
 
     /**
      * Create a count comparison row for the table
      */
-    protected function makeCountRow(int $index, string $entity, int|string $bitrixCount, int|string $laravelCount, ?bool $forceResult = null): array
+    private function makeCountRow(int $index, string $entity, int|string $bitrixCount, int|string $laravelCount): array
     {
-        if ($forceResult === false) {
-            $match = 'ERROR';
-            $diff = '-';
-            $this->recordCheck(false);
-        } elseif (is_int($bitrixCount) && is_int($laravelCount)) {
+        if (is_int($bitrixCount) && is_int($laravelCount)) {
             $diff = $bitrixCount - $laravelCount;
             $match = $diff === 0 ? 'OK' : 'MISMATCH';
             $this->recordCheck($diff === 0);
@@ -540,7 +523,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
     /**
      * Create a pivot comparison row for the table
      */
-    protected function makePivotRow(int $index, string $table, int|string $bitrixCount, int|string $laravelCount): array
+    private function makePivotRow(int $index, string $table, int|string $bitrixCount, int|string $laravelCount): array
     {
         if (is_int($bitrixCount) && is_int($laravelCount)) {
             $match = $bitrixCount === $laravelCount ? 'OK' : "MISMATCH ({$bitrixCount} vs {$laravelCount})";
@@ -556,7 +539,7 @@ class VerifyDataCommand extends AbstractBitrixCommand
     /**
      * Record a check result
      */
-    protected function recordCheck(bool $passed): void
+    private function recordCheck(bool $passed): void
     {
         $this->totalChecks++;
         if ($passed) {
