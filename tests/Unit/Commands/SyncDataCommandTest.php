@@ -13,6 +13,7 @@ use Atrium\Bitrix\Commands\SyncDataCommand;
 use Atrium\Bitrix\Support\BitrixConnection;
 use Atrium\Bitrix\Tests\SyntheticTestCase;
 use Illuminate\Console\OutputStyle;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -33,6 +34,56 @@ final class SyncDataCommandTest extends SyntheticTestCase
     {
         $this->generateSchema();
         $this->artisan('atrium:bitrix:migrate:data', ['--force' => true, '--no-interaction' => true])->assertSuccessful();
+    }
+
+    /**
+     * @return iterable<string,array{array<string,bool>,string}>
+     */
+    public static function banners(): iterable
+    {
+        yield 'a plain run' => [[], "\n\n"];
+        yield 'a dry run' => [['--dry-run' => true], "\nDry run: nothing is written.\n\n\n"];
+        yield 'an audit' => [['--audit' => true], "\nFull audit: checking all elements, not only those fresh in Bitrix.\n\n\n"];
+    }
+
+    /**
+     * @param  array<string,bool>  $options
+     */
+    #[DataProvider('banners')]
+    public function test_the_report_is_laid_out_with_blank_lines_between_its_parts(array $options, string $banner): void
+    {
+        $this->migrate();
+        $this->changeBitrix();
+
+        Artisan::call('atrium:bitrix:sync', ['--force' => true, '--chunk' => 2] + $options);
+
+        $expected = <<<'TXT'
+        Catch-up transfer from Bitrix
+        ==============================
+
+        TXT;
+        $expected .= $banner.<<<'TXT'
+        News -> news (2)
+          ~ section 3: name, updated_at, detail_picture
+          + section 4: Tablets
+
+        Products -> products (4)
+          ~ 2: Laptop Air 2
+              name, updated_at
+          + 6: Tablet
+
+        Total
+        +------------------+-------+---------+-----------+-------------------+
+        | Table            | Added | Updated | Unchanged | Missing in Bitrix |
+        +------------------+-------+---------+-----------+-------------------+
+        | news             | 0     | 0       | 2         | 0                 |
+        | product_sections | 1     | 1       | 2         | 0                 |
+        | products         | 1     | 1       | 2         | 0                 |
+        +------------------+-------+---------+-----------+-------------------+
+
+        TXT;
+
+        $this->assertSame($expected, Artisan::output());
     }
 
     public function test_nothing_changed_in_bitrix_means_nothing_to_do(): void
@@ -295,6 +346,157 @@ final class SyncDataCommandTest extends SyntheticTestCase
     }
 
     /**
+     * What a run prints when Bitrix hands its rows over reshaped, as another
+     * database driver or an older Bitrix would.
+     *
+     * @param  array<string,mixed>  $options
+     * @param  callable(array<string,mixed>): array<string,mixed>  $reshape
+     */
+    private function runWithRowsReshaped(callable $reshape, array $options = []): string
+    {
+        $command = $this->command(['--force' => true, '--chunk' => '2'] + $options);
+        $this->set($command, 'bitrixConnection', new class('bitrix', $reshape) extends BitrixConnection
+        {
+            /** @param callable(array<string,mixed>): array<string,mixed> $reshape */
+            public function __construct(?string $name, private $reshape)
+            {
+                parent::__construct($name);
+            }
+
+            public function getIBlocks(?string $typeId = null): array
+            {
+                return array_map($this->reshape, parent::getIBlocks($typeId));
+            }
+
+            public function getIBlockSections(int $iblockId): array
+            {
+                return array_map($this->reshape, parent::getIBlockSections($iblockId));
+            }
+
+            public function getIBlockElements(int $iblockId, int $limit, int $offset): array
+            {
+                return array_map($this->reshape, parent::getIBlockElements($iblockId, $limit, $offset));
+            }
+        });
+
+        $this->assertSame(0, $command->handle());
+
+        return $this->output->fetch();
+    }
+
+    public function test_a_section_without_ordering_or_flags_gets_the_usual_defaults(): void
+    {
+        $this->migrate();
+        $db = $this->bitrix();
+        $db->table('b_iblock_section')->insert(['ID' => 5, 'IBLOCK_ID' => 2, 'NAME' => 'Bare', 'CODE' => 'bare', 'LEFT_MARGIN' => 8, 'RIGHT_MARGIN' => 9]);
+        $db->table('b_iblock_section')->insert(['ID' => 6, 'IBLOCK_ID' => 2, 'NAME' => 'Hidden', 'CODE' => 'hidden', 'ACTIVE' => 'N', 'SORT' => 700, 'LEFT_MARGIN' => 10, 'RIGHT_MARGIN' => 11, 'DEPTH_LEVEL' => 3]);
+
+        $this->runWithRowsReshaped(static function (array $row): array {
+            if (($row['ID'] ?? null) === 5) {
+                unset($row['SORT'], $row['ACTIVE'], $row['DEPTH_LEVEL'], $row['LEFT_MARGIN'], $row['RIGHT_MARGIN']);
+            }
+
+            return $row;
+        }, ['--iblock' => ['2']]);
+
+        $bare = DB::table('product_sections')->where('id', 5)->first();
+        $this->assertSame([500, true, 0, 0, 0], [(int) $bare->sort, (bool) $bare->active, (int) $bare->depth, (int) $bare->left_margin, (int) $bare->right_margin]);
+        $hidden = DB::table('product_sections')->where('id', 6)->first();
+        $this->assertSame([700, false, 3, 10, 11], [(int) $hidden->sort, (bool) $hidden->active, (int) $hidden->depth, (int) $hidden->left_margin, (int) $hidden->right_margin]);
+    }
+
+    public function test_every_new_row_of_a_run_comes_over_with_its_own_id_and_picture(): void
+    {
+        $this->migrate();
+        $db = $this->bitrix();
+        $db->table('b_iblock_section')->insert(['ID' => 4, 'IBLOCK_ID' => 2, 'NAME' => 'Pictured', 'CODE' => 'pictured', 'PICTURE' => 2, 'LEFT_MARGIN' => 7, 'RIGHT_MARGIN' => 8, 'DEPTH_LEVEL' => 1]);
+        $db->table('b_iblock_section')->insert(['ID' => 9, 'IBLOCK_ID' => 2, 'NAME' => 'Plain', 'CODE' => 'plain', 'LEFT_MARGIN' => 9, 'RIGHT_MARGIN' => 10, 'DEPTH_LEVEL' => 1]);
+        $db->table('b_iblock_element')->insert([
+            ['ID' => 6, 'IBLOCK_ID' => 2, 'NAME' => 'Sixth', 'CODE' => 'sixth', 'ACTIVE' => 'Y', 'SORT' => 600, 'TIMESTAMP_X' => self::LATER],
+            ['ID' => 7, 'IBLOCK_ID' => 2, 'NAME' => 'Seventh', 'CODE' => 'seventh', 'ACTIVE' => 'Y', 'SORT' => 700, 'TIMESTAMP_X' => self::LATER],
+        ]);
+
+        $this->artisan('atrium:bitrix:sync', ['--force' => true, '--iblock' => ['2']])->assertSuccessful();
+
+        $this->assertSame([1, 2, 3, 4, 9], DB::table('product_sections')->orderBy('id')->pluck('id')->map(fn ($id): int => (int) $id)->all());
+        $this->assertSame([4, 9], DB::table('product_sections')->whereIn('id', [4, 9])->orderBy('id')->pluck('bitrix_id')->map(fn ($id): int => (int) $id)->all());
+        $this->assertSame('/upload/iblock/c2d/laptop-side.jpg', DB::table('product_sections')->where('id', 4)->value('picture'));
+        $this->assertNull(DB::table('product_sections')->where('id', 9)->value('picture'));
+        $this->assertSame([1, 2, 3, 6, 7], DB::table('products')->orderBy('id')->pluck('id')->map(fn ($id): int => (int) $id)->all());
+    }
+
+    public function test_an_iblock_that_is_missing_or_skipped_does_not_stop_the_ones_after_it(): void
+    {
+        $this->migrate();
+        config(['atrium-bitrix.skip_iblocks' => [1]]);
+
+        $this->artisan('atrium:bitrix:sync', ['--force' => true, '--iblock' => ['1', '99', '2']])
+            ->expectsOutput('Iblock 99 not found')
+            ->expectsOutput('Products -> products (3)')
+            ->doesntExpectOutputToContain('News ->')
+            ->assertSuccessful();
+    }
+
+    public function test_a_changed_row_keeps_its_links(): void
+    {
+        $this->migrate();
+        $this->bitrix()->table('b_iblock_element')->where('ID', 1)->update(['NAME' => 'Laptop Pro 2', 'TIMESTAMP_X' => self::LATER]);
+
+        $this->artisan('atrium:bitrix:sync', ['--force' => true, '--iblock' => ['2']])
+            ->expectsOutput('  ~ 1: Laptop Pro 2')
+            ->assertSuccessful();
+
+        $this->assertSame([[1, 2], [2, 1]], $this->related());
+    }
+
+    public function test_a_link_table_that_is_gone_does_not_stop_the_clearing_of_the_next_one(): void
+    {
+        $this->skipOnPostgres();
+        $db = $this->bitrix();
+        $db->table('b_iblock_property')->insert([
+            'ID' => 24, 'IBLOCK_ID' => 2, 'NAME' => 'Also related', 'CODE' => 'ALSO_RELATED', 'PROPERTY_TYPE' => 'E',
+            'MULTIPLE' => 'Y', 'SORT' => 999, 'LINK_IBLOCK_ID' => 2,
+        ]);
+        $db->table('b_iblock_element_prop_m2')->insert(['ID' => 30, 'IBLOCK_ELEMENT_ID' => 1, 'IBLOCK_PROPERTY_ID' => 24, 'VALUE' => '3']);
+        $this->migrate();
+        $this->assertSame(1, DB::table('products_also_related')->count());
+
+        Schema::drop('products_related');
+        $db->table('b_iblock_element_prop_m2')->where('ID', 30)->delete();
+        $db->table('b_iblock_element')->where('ID', 1)->update(['NAME' => 'Laptop Pro 2', 'TIMESTAMP_X' => self::LATER]);
+
+        $this->artisan('atrium:bitrix:sync', ['--force' => true, '--iblock' => ['2']])
+            ->expectsOutput('  ~ 1: Laptop Pro 2')
+            ->assertSuccessful();
+
+        $this->assertSame(0, DB::table('products_also_related')->count(), 'the link removed in Bitrix is gone here too');
+    }
+
+    public function test_a_page_as_big_as_the_whole_iblock_is_the_only_one_read(): void
+    {
+        $this->migrate();
+        $command = $this->command(['--chunk' => '3']);
+        $connection = new class('bitrix') extends BitrixConnection
+        {
+            public int $reads = 0;
+
+            public function getIBlockElements(int $iblockId, int $limit, int $offset): array
+            {
+                $this->reads++;
+
+                return parent::getIBlockElements($iblockId, $limit, $offset);
+            }
+        };
+        $this->set($command, 'bitrixConnection', $connection);
+        $this->set($command, 'chunkSize', 3);
+        $this->set($command, 'skipFiles', true);
+
+        $this->invoke($command, 'syncElements', $this->invoke($command, 'getIBlockAnalyzer')->analyze(2));
+
+        $this->assertSame(1, $connection->reads);
+    }
+
+    /**
      * @return iterable<string,array{mixed,mixed,bool}>
      */
     public static function values(): iterable
@@ -315,6 +517,8 @@ final class SyncDataCommandTest extends SyntheticTestCase
         yield 'a quoted text and the bare text' => ['"x"', 'x', true];
         yield 'the same broken JSON' => ['[broken', '[broken', false];
         yield 'two broken JSONs' => ['[broken', '[other', true];
+        yield 'a text only JSON could read as the same value' => ['TRUE', 'true', true];
+        yield 'a bare JSON word and itself' => ['null', 'null', false];
         yield 'a price as text and as a number' => ['1999.50', 1999.5, false];
         yield 'numbers within a millionth' => ['1', '1.0000001', false];
         yield 'numbers apart' => ['1', '1.00001', true];
@@ -326,6 +530,10 @@ final class SyncDataCommandTest extends SyntheticTestCase
         yield 'a date and a word' => ['2024-03-15 12:30:00', 'soon', true];
         yield 'texts that differ in spaces around' => [' text ', 'text', false];
         yield 'two texts' => ['a', 'b', true];
+        yield 'a word and zero' => ['abc', '0', true];
+        yield 'numbers exactly a millionth apart' => ['0', '0.000001', false];
+        yield 'a date led by a weekday is only text' => ['Friday 2024-03-15 12:30:00', '2024-03-15 12:30:00', true];
+        yield 'a date without a time is only text' => ['2024-03-15', '2024-03-15 00:00:00', true];
     }
 
     #[DataProvider('values')]
