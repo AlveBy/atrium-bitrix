@@ -103,12 +103,22 @@ class ReferenceModelGenerator
         $namespace->addUse('Atrium\\Admin\\Contracts\\ReferenceAdministrable');
         $namespace->addUse('Atrium\\Admin\\Traits\\InteractsWithAdmin');
         $namespace->addUse('Atrium\\Admin\\Fields\\TextField');
+        $namespace->addUse('Atrium\\Admin\\Fields\\TextareaField');
+        $namespace->addUse('Atrium\\Admin\\Fields\\ContentField');
         $namespace->addUse('Atrium\\Admin\\Fields\\NumberField');
         $namespace->addUse('Atrium\\Admin\\Fields\\CheckboxField');
         $namespace->addUse('Atrium\\Admin\\Fields\\SelectField');
+        $namespace->addUse('Atrium\\Admin\\Fields\\MultiSelectField');
         $namespace->addUse('Atrium\\Admin\\Fields\\ImageField');
+        $namespace->addUse('Atrium\\Admin\\Fields\\GalleryField');
+        $namespace->addUse('Atrium\\Admin\\Fields\\DateField');
+        $namespace->addUse('Atrium\\Admin\\Fields\\DateTimeField');
+        $namespace->addUse('Atrium\\Admin\\Fields\\BelongsToField');
+        $namespace->addUse('Atrium\\Admin\\Fields\\BelongsToManyField');
         $namespace->addUse('Atrium\\Admin\\Columns\\TextColumn');
+        $namespace->addUse('Atrium\\Admin\\Columns\\ImageColumn');
         $namespace->addUse('Atrium\\Admin\\Columns\\BooleanColumn');
+        $namespace->addUse('Atrium\\Admin\\Columns\\DateColumn');
     }
 
     /**

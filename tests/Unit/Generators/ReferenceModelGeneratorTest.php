@@ -28,12 +28,12 @@ final class ReferenceModelGeneratorTest extends TestCase
     /**
      * @param  list<array<string,mixed>>  $fields  FIELD_NAME, USER_TYPE_ID and optional MULTIPLE, MANDATORY, SETTINGS
      */
-    private function model(array $fields): string
+    private function model(array $fields, string $name = 'Brands'): string
     {
         config(['atrium-bitrix.strip_prefixes' => [], 'atrium-bitrix.naming.mappings' => []]);
         $naming = new NamingConvention;
 
-        $hlblock = HighloadBlock::fromArray(['ID' => 1, 'NAME' => 'Brands', 'TABLE_NAME' => 'b_hlbd_brands']);
+        $hlblock = HighloadBlock::fromArray(['ID' => 1, 'NAME' => $name, 'TABLE_NAME' => 'b_hlbd_brands']);
         foreach ($fields as $i => $field) {
             $hlblock->addField($built = HighloadBlockField::fromArray(['ID' => $i + 1, 'ENTITY_ID' => 'HLBLOCK_1', ...$field]));
 
@@ -51,7 +51,31 @@ final class ReferenceModelGeneratorTest extends TestCase
     {
         $model = $this->model([['FIELD_NAME' => 'UF_NAME', 'USER_TYPE_ID' => 'string']]);
 
-        $this->assertStringContainsString('namespace App\\Models\\References;', $model);
+        $this->assertStringContainsString("<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\Models\\References;\n", $model);
+        $this->assertStringContainsString(
+            "use Atrium\\Admin\\Columns\\BooleanColumn;\n"
+            ."use Atrium\\Admin\\Columns\\DateColumn;\n"
+            ."use Atrium\\Admin\\Columns\\ImageColumn;\n"
+            ."use Atrium\\Admin\\Columns\\TextColumn;\n"
+            ."use Atrium\\Admin\\Contracts\\ReferenceAdministrable;\n"
+            ."use Atrium\\Admin\\Fields\\BelongsToField;\n"
+            ."use Atrium\\Admin\\Fields\\BelongsToManyField;\n"
+            ."use Atrium\\Admin\\Fields\\CheckboxField;\n"
+            ."use Atrium\\Admin\\Fields\\ContentField;\n"
+            ."use Atrium\\Admin\\Fields\\DateField;\n"
+            ."use Atrium\\Admin\\Fields\\DateTimeField;\n"
+            ."use Atrium\\Admin\\Fields\\GalleryField;\n"
+            ."use Atrium\\Admin\\Fields\\ImageField;\n"
+            ."use Atrium\\Admin\\Fields\\MultiSelectField;\n"
+            ."use Atrium\\Admin\\Fields\\NumberField;\n"
+            ."use Atrium\\Admin\\Fields\\SelectField;\n"
+            ."use Atrium\\Admin\\Fields\\TextField;\n"
+            ."use Atrium\\Admin\\Fields\\TextareaField;\n"
+            ."use Atrium\\Admin\\Traits\\InteractsWithAdmin;\n"
+            ."use Illuminate\\Database\\Eloquent\\Model;\n"
+            ."use Illuminate\\Database\\Eloquent\\Relations\\BelongsTo;\n",
+            $model,
+        );
         $this->assertStringContainsString('class Brands extends Model implements ReferenceAdministrable', $model);
         $this->assertStringContainsString("protected \$table = 'brands';", $model);
         $this->assertStringContainsString("return 'Brands';", $model);
@@ -75,9 +99,41 @@ final class ReferenceModelGeneratorTest extends TestCase
         $this->assertStringContainsString("NumberField::make('sort')->label('Sort'),", $model);
         $this->assertStringContainsString("SelectField::make('kind')->label('Kind')->options(array (0 => array ('value' => '1','label' => 'Big',),)),", $model);
         $this->assertStringContainsString("TextField::make('full_name')->label('Full name')->required(),\n            NumberField", $model);
+        $this->assertStringContainsString("TextColumn::make('full_name')->label('Full name')->sortable(),", $model);
+        $this->assertStringContainsString("protected \$fillable = ['full_name', 'sort', 'active', 'kind'];", $model);
         $this->assertStringContainsString("'sort' => 'integer'", $model);
         $this->assertStringContainsString("'active' => 'boolean'", $model);
         $this->assertStringNotContainsString("'full_name' =>", $model);
+    }
+
+    public function test_a_model_with_a_field_of_every_type_can_be_loaded_and_asked_for_its_fields(): void
+    {
+        $types = ['string', 'integer', 'double', 'boolean', 'datetime', 'date', 'file', 'enumeration', 'hlblock', 'html', 'url', 'address'];
+        $fields = [];
+
+        foreach ($types as $type) {
+            $fields[] = ['FIELD_NAME' => 'UF_'.strtoupper($type), 'USER_TYPE_ID' => $type];
+            $fields[] = ['FIELD_NAME' => 'UF_MANY_'.strtoupper($type), 'USER_TYPE_ID' => $type, 'MULTIPLE' => 'Y'];
+        }
+
+        $file = sys_get_temp_dir().'/atrium-reference-'.bin2hex(random_bytes(4)).'.php';
+        file_put_contents($file, $this->model($fields, 'EveryTypeReference'));
+
+        try {
+            require $file;
+        } finally {
+            unlink($file);
+        }
+
+        $class = 'App\\Models\\References\\EveryTypeReference';
+        $names = array_map(static fn (object $field): string => $field::class, $class::getAdministrationFields());
+
+        $this->assertCount(count($fields), $names);
+        $this->assertSame(
+            ['BelongsToField', 'BelongsToManyField', 'CheckboxField', 'ContentField', 'DateField', 'DateTimeField', 'GalleryField', 'ImageField', 'MultiSelectField', 'NumberField', 'SelectField', 'TextField', 'TextareaField'],
+            collect($names)->map(static fn (string $name): string => class_basename($name))->unique()->sort()->values()->all(),
+        );
+        $this->assertCount(5, $class::getAdministrationListColumns(), 'the id and at most four fields');
     }
 
     public function test_the_list_shows_at_most_four_fields_after_the_id(): void
