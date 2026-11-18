@@ -72,7 +72,7 @@ class FieldTypeMapper
     /**
      * Map IBlock property to field class name
      */
-    protected function mapPropertyToFieldClass(IBlockProperty $property): string
+    private function mapPropertyToFieldClass(IBlockProperty $property): string
     {
         $type = $property->getFullType();
 
@@ -80,13 +80,6 @@ class FieldTypeMapper
         if ($property->multiple) {
             // Some types have their own multiple handling
             $multipleFieldClass = match ($type) {
-                // Multiple HTML properties (e.g. per-day descriptions): Bitrix gives
-                // each value its own editor. A single ContentField doesn't fit here:
-                // it showed only the first value from the json and didn't let
-                // you add a second one.
-                'S:HTML' => 'RepeatableField',
-                'S:Date' => 'RepeatableField',
-                'S:DateTime' => 'RepeatableField',
                 'S:directory' => 'BelongsToManyField',
                 default => null,
             };
@@ -95,10 +88,11 @@ class FieldTypeMapper
                 return $multipleFieldClass;
             }
 
-            // Handle multiple by base type
+            // Handle by base type. Multiple strings, numbers, dates, date-times
+            // and HTML (per-day descriptions: Bitrix gives each value its own
+            // editor, which a single ContentField, showing only the first value
+            // of the json, cannot) are all repeatable values.
             return match ($property->propertyType) {
-                'S' => 'RepeatableField', // Multiple strings
-                'N' => 'RepeatableField', // Multiple numbers
                 'L' => 'MultiSelectField', // Multiple select from list
                 'F' => 'GalleryField', // Multiple files
                 'E' => 'BelongsToManyField', // Multiple element links
@@ -146,10 +140,9 @@ class FieldTypeMapper
     /**
      * Map HL block field to field class name
      */
-    protected function mapHlFieldToFieldClass(HighloadBlockField $field): string
+    private function mapHlFieldToFieldClass(HighloadBlockField $field): string
     {
         return match ($field->userTypeId) {
-            'string' => 'TextField',
             'integer' => 'NumberField',
             'double', 'money' => 'NumberField',
             'boolean' => 'CheckboxField',
@@ -159,7 +152,6 @@ class FieldTypeMapper
             'enumeration' => $field->multiple ? 'MultiSelectField' : 'SelectField',
             'hlblock' => $field->multiple ? 'BelongsToManyField' : 'BelongsToField',
             'html' => 'ContentField',
-            'url' => 'TextField',
             'address' => 'TextareaField',
             default => 'TextField',
         };
@@ -168,7 +160,7 @@ class FieldTypeMapper
     /**
      * Get field-specific configuration for IBlock property
      */
-    protected function getFieldConfig(IBlockProperty $property): array
+    private function getFieldConfig(IBlockProperty $property): array
     {
         $config = [];
 
@@ -249,11 +241,7 @@ class FieldTypeMapper
                 // Each value gets its own editor with a Text/HTML/Visual
                 // switch, as in Bitrix.
                 'S:HTML' => 'content',
-                default => match ($property->propertyType) {
-                    'N' => 'number',
-                    'S' => 'text',
-                    default => 'text',
-                },
+                default => $property->propertyType === 'N' ? 'number' : 'text',
             };
             $config['itemType'] = $itemType;
         }
@@ -279,7 +267,7 @@ class FieldTypeMapper
     /**
      * Get field-specific configuration for HL block field
      */
-    protected function getHlFieldConfig(HighloadBlockField $field): array
+    private function getHlFieldConfig(HighloadBlockField $field): array
     {
         $config = [];
 
@@ -319,7 +307,7 @@ class FieldTypeMapper
     /**
      * Get file accept type based on property settings
      */
-    protected function getFileAcceptType(IBlockProperty $property): string
+    private function getFileAcceptType(IBlockProperty $property): string
     {
         // Check user type settings for file type restrictions
         if (! empty($property->userTypeSettings['FILE_TYPE'])) {
@@ -395,7 +383,7 @@ class FieldTypeMapper
     /**
      * Check if property is a YES/NO enumeration (for BooleanColumn)
      */
-    protected function isYesNoEnum(IBlockProperty $property): bool
+    private function isYesNoEnum(IBlockProperty $property): bool
     {
         if (! $property->isList() || empty($property->enumValues)) {
             return false;

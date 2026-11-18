@@ -75,6 +75,7 @@ final class FieldTypeMapperTest extends TestCase
         yield 'number checkbox' => [self::property('N', 'SASDCheckbox'), 'CheckboxField'];
         yield 'number numeric checkbox' => [self::property('N', 'SASDCheckboxNum'), 'CheckboxField'];
         yield 'video' => [self::property('S', 'video'), 'TextField'];
+        yield 'video in a tall input is still one line' => [self::property('S', 'video', false, ['ROW_COUNT' => 5]), 'TextField'];
         yield 'user' => [self::property('S', 'UserID'), 'BelongsToField'];
         yield 'palette' => [self::property('S', 'SASDPalette'), 'ColorField'];
         yield 'directory' => [self::property('S', 'directory'), 'BelongsToField'];
