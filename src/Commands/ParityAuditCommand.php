@@ -19,6 +19,7 @@ use Atrium\Bitrix\Support\BitrixSites;
 use Atrium\Bitrix\Support\NamingConvention;
 use Atrium\Bitrix\Support\ProjectFields;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
@@ -147,7 +148,7 @@ class ParityAuditCommand extends Command
      *
      * @param  array<int,array<string,mixed>>  $iblocks
      */
-    protected function auditListColumns(array $iblocks): void
+    private function auditListColumns(array $iblocks): void
     {
         $rows = [];
 
@@ -159,16 +160,11 @@ class ParityAuditCommand extends Command
                 continue;
             }
 
-            $codes = [];
-            foreach ($this->bitrix->getIBlockProperties($iblockId) as $property) {
-                $codes[(int) $property['ID']] = (string) $property['CODE'];
-            }
-
             $layout = BitrixListLayout::load(
                 $this->bitrix->getConnection(),
                 (string) $iblock['IBLOCK_TYPE_ID'],
                 $iblockId,
-                $codes,
+                $this->propertyCodes($iblockId),
                 $this->naming
             );
 
@@ -211,8 +207,37 @@ class ParityAuditCommand extends Command
         $this->info('List columns vs. list settings in Bitrix');
         $this->table(['IBlock', 'Columns', 'Missing here', 'Extra here', 'Same order', 'Decided otherwise'], $rows);
 
-        $perfect = count(array_filter($rows, static fn (array $r): bool => $r[2] === '—' && $r[3] === '—' && $r[4] === 'yes'));
+        // Nothing missing and nothing extra is the same order, so the order column says it all.
+        $perfect = count(array_filter($rows, static fn (array $r): bool => $r[4] === 'yes'));
         $this->line(sprintf('Lists fully matching Bitrix: %d of %d', $perfect, count($rows)));
+    }
+
+    /**
+     * @return array<int,string> property ID => CODE
+     */
+    private function propertyCodes(int $iblockId): array
+    {
+        $codes = [];
+        foreach ($this->bitrix->getIBlockProperties($iblockId) as $property) {
+            $codes[$property['ID']] = (string) $property['CODE'];
+        }
+
+        return $codes;
+    }
+
+    /**
+     * @param  array<string,mixed>  $fields
+     * @param  array<int,string>  $candidates
+     */
+    private function firstFieldName(array $fields, array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (isset($fields[$candidate])) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -245,7 +270,7 @@ class ParityAuditCommand extends Command
      *
      * @param  array<int,array<string,mixed>>  $iblocks
      */
-    protected function auditWidgets(array $iblocks): void
+    private function auditWidgets(array $iblocks): void
     {
         $rows = [];
 
@@ -266,26 +291,14 @@ class ParityAuditCommand extends Command
 
                 $property = IBlockProperty::fromArray($raw);
                 $column = $this->naming->toColumnName($property->code);
-                $field = null;
+                $name = $this->firstFieldName($fields, [$column, Str::camel($column), Str::camel(Str::plural($column))]);
 
-                foreach ([$column, Str::camel($column), Str::camel(Str::plural($column))] as $candidate) {
-                    if (isset($fields[$candidate])) {
-                        $field = $fields[$candidate];
-                        break;
-                    }
-                }
-
-                if ($field === null) {
+                if ($name === null) {
                     continue;
                 }
 
-                // List options come from a separate query: fromArray() does not
-                // fill them, and without them a "single-option list" cannot be told apart.
-                $enumCount = $property->propertyType === 'L'
-                    ? count($this->bitrix->getPropertyEnumValues((int) $raw['ID']))
-                    : 0;
-
-                $expected = $this->expectedWidget($property, (string) ($raw['LIST_TYPE'] ?? 'L'), (string) ($raw['FILE_TYPE'] ?? ''), $enumCount);
+                $field = $fields[$name];
+                $expected = $this->expectedWidget($property, (string) ($raw['LIST_TYPE'] ?? 'L'), (string) ($raw['FILE_TYPE'] ?? ''));
 
                 if ($expected !== null && ! in_array($field['type'], $expected['types'], true)) {
                     $rows[] = [
@@ -314,12 +327,14 @@ class ParityAuditCommand extends Command
     /**
      * @return array{bitrix:string,types:array<int,string>}|null
      */
-    protected function expectedWidget(IBlockProperty $property, string $listType, string $fileType, int $enumCount): ?array
+    private function expectedWidget(IBlockProperty $property, string $listType, string $fileType): ?array
     {
         // A list shown as checkboxes. A single option is a plain checkbox;
         // several options are a set of checkboxes (multiple) or radio buttons.
         if ($property->propertyType === 'L' && $listType === 'C') {
-            if (! $property->multiple && $enumCount === 1) {
+            // List options come from a separate query: fromArray() does not
+            // fill them, and without them a "single-option list" cannot be told apart.
+            if (! $property->multiple && count($this->bitrix->getPropertyEnumValues($property->id)) === 1) {
                 return ['bitrix' => 'checkbox (list C, 1 option)', 'types' => ['checkbox']];
             }
 
@@ -330,10 +345,8 @@ class ParityAuditCommand extends Command
 
         // File property: the allowed extensions decide whether these are images or documents.
         if ($property->propertyType === 'F' && $fileType !== '') {
-            $documents = (bool) preg_match('/doc|pdf|xls|txt|rtf|ppt/i', $fileType);
-
             return [
-                'bitrix' => $documents ? "files ({$fileType})" : 'images',
+                'bitrix' => preg_match('/doc|pdf|xls|txt|rtf|ppt/i', $fileType) ? "files ({$fileType})" : 'images',
                 'types' => $property->multiple ? ['gallery'] : ['image', 'file'],
             ];
         }
@@ -350,9 +363,10 @@ class ParityAuditCommand extends Command
      *
      * @param  array<int,array<string,mixed>>  $iblocks
      */
-    protected function auditLayouts(array $iblocks): void
+    private function auditLayouts(array $iblocks): void
     {
         $rows = [];
+        $perfect = 0;
 
         foreach ($iblocks as $iblock) {
             $iblockId = (int) $iblock['ID'];
@@ -363,12 +377,7 @@ class ParityAuditCommand extends Command
                 continue;
             }
 
-            $propertyCodes = [];
-            foreach ($this->bitrix->getIBlockProperties($iblockId) as $property) {
-                $propertyCodes[(int) $property['ID']] = (string) $property['CODE'];
-            }
-
-            $layout = BitrixFormLayout::load($this->bitrix->getConnection(), $iblockId, $propertyCodes, $this->naming);
+            $layout = BitrixFormLayout::load($this->bitrix->getConnection(), $iblockId, $this->propertyCodes($iblockId), $this->naming);
 
             if ($layout === null) {
                 continue;
@@ -410,10 +419,16 @@ class ParityAuditCommand extends Command
             }
 
             $total = count($sequence);
+            $sameTabs = implode(', ', $ourTabs) === implode(', ', $theirTabs);
+
+            if ($sameTabs && $wrongTab === [] && $total > 0 && $inPlace === $total) {
+                $perfect++;
+            }
+
             $rows[] = [
                 $code ?? ('iblock_'.$iblockId),
                 implode(', ', $theirTabs),
-                implode(', ', $ourTabs) === implode(', ', $theirTabs) ? '= same as Bitrix' : implode(', ', $ourTabs),
+                $sameTabs ? '= same as Bitrix' : implode(', ', $ourTabs),
                 $wrongTab === [] ? '—' : implode(', ', array_slice($wrongTab, 0, 4)).(count($wrongTab) > 4 ? '…' : ''),
                 $total === 0 ? '—' : sprintf('%d/%d', $inPlace, $total),
             ];
@@ -427,7 +442,6 @@ class ParityAuditCommand extends Command
         $this->info('Form: tabs and field order (reference: the Bitrix admin layout)');
         $this->table(['IBlock', 'Tabs in Bitrix', 'Tabs here', 'Field on the wrong tab', 'Order'], $rows);
 
-        $perfect = count(array_filter($rows, static fn (array $r): bool => $r[2] === '= same as Bitrix' && $r[3] === '—' && str_contains((string) $r[4], '/') && explode('/', (string) $r[4])[0] === explode('/', (string) $r[4])[1]));
         $this->line(sprintf('Forms fully matching Bitrix: %d of %d', $perfect, count($rows)));
     }
 
@@ -438,15 +452,11 @@ class ParityAuditCommand extends Command
      * layout knows the column (link_goods). Without this translation, relation
      * fields would look like "Bitrix never had this".
      */
-    protected function layoutKey(BitrixFormLayout $layout, string $fieldName): ?string
+    private function layoutKey(BitrixFormLayout $layout, string $fieldName): ?string
     {
-        $candidates = [
-            $fieldName,
-            Str::snake($fieldName),
-            Str::snake(Str::singular($fieldName)),
-        ];
-
-        foreach ($candidates as $candidate) {
+        // The layout keys are snake_case already, so a field named like its
+        // key is found by the snake_case of its name as well.
+        foreach ([Str::snake($fieldName), Str::snake(Str::singular($fieldName))] as $candidate) {
             if ($layout->tabFor($candidate) !== null) {
                 return $candidate;
             }
@@ -455,7 +465,7 @@ class ParityAuditCommand extends Command
         return null;
     }
 
-    protected function auditIBlock(array $iblock): void
+    private function auditIBlock(array $iblock): void
     {
         $iblockId = (int) $iblock['ID'];
         $code = $iblock['CODE'] ?: null;
@@ -536,17 +546,8 @@ class ParityAuditCommand extends Command
             $relationSingular = $this->naming->toRelationName($property->code, false);
             $relationPlural = $this->naming->toRelationName($property->code, true);
 
-            $candidates = array_unique([$column, $relationPlural, $relationSingular, Str::camel($column)]);
-
-            $field = null;
-            $matchedName = null;
-            foreach ($candidates as $candidate) {
-                if (isset($fields[$candidate])) {
-                    $field = $fields[$candidate];
-                    $matchedName = $candidate;
-                    break;
-                }
-            }
+            $matchedName = $this->firstFieldName($fields, [$column, $relationPlural, $relationSingular, Str::camel($column)]);
+            $field = $matchedName === null ? null : $fields[$matchedName];
             if ($matchedName !== null) {
                 $matchedFieldNames[] = $matchedName;
             }
@@ -640,7 +641,7 @@ class ParityAuditCommand extends Command
      * Resolve the Administrable model for an IBlock code, tolerating models
      * that fatal while building their field list.
      */
-    protected function resolveModel(?string $code, int $iblockId): ?string
+    private function resolveModel(?string $code, int $iblockId): ?string
     {
         $candidates = [];
         $namespace = rtrim((string) config('atrium-bitrix.model_namespace', 'App\\Models'), '\\');
@@ -662,7 +663,7 @@ class ParityAuditCommand extends Command
     /**
      * @return array<string,array<string,mixed>> field name => serialized field
      */
-    protected function adminFields(string $modelClass): array
+    private function adminFields(string $modelClass): array
     {
         if (! method_exists($modelClass, 'getAdministrationFields')) {
             return [];
@@ -689,7 +690,7 @@ class ParityAuditCommand extends Command
      * The options of a list decide its widget: one option shown as checkboxes
      * is a plain checkbox, not a select.
      */
-    protected function loadEnumValues(IBlockProperty $property): void
+    private function loadEnumValues(IBlockProperty $property): void
     {
         foreach ($this->bitrix->getPropertyEnumValues($property->id) as $enum) {
             $property->addEnumValue(IBlockPropertyEnum::fromArray($enum));
@@ -699,14 +700,14 @@ class ParityAuditCommand extends Command
     /**
      * The widget type a short field class name (as the mapper gives it) stands for.
      */
-    protected function fieldTypeFromClass(string $shortName): string
+    private function fieldTypeFromClass(string $shortName): string
     {
         $class = $this->mapper->getFieldClassName($shortName);
 
         return (new $class)->getType();
     }
 
-    protected function typeIsMultiple(string $type): bool
+    private function typeIsMultiple(string $type): bool
     {
         return in_array($type, ['gallery', 'repeatable', 'belongsToMany', 'multiSelect', 'treeSelect', 'content'], true);
     }
@@ -714,15 +715,11 @@ class ParityAuditCommand extends Command
     /**
      * @return string|null problem description, or null when the enums agree
      */
-    protected function compareEnum(IBlockProperty $property, array $field): ?string
+    private function compareEnum(IBlockProperty $property, array $field): ?string
     {
         $bitrixValues = [];
         foreach ($this->bitrix->getPropertyEnumValues($property->id) as $enum) {
-            $bitrixValues[] = (string) ($enum['XML_ID'] ?: $enum['ID']);
-        }
-
-        if ($bitrixValues === []) {
-            return null;
+            $bitrixValues[] = $enum['XML_ID'] ?: $enum['ID'];
         }
 
         $ourValues = array_map(
@@ -733,7 +730,7 @@ class ParityAuditCommand extends Command
         // A one-option list shown as a checkbox has no options: the option it
         // stands for is the value it stores when ticked.
         if (($field['checkedValue'] ?? null) !== null) {
-            $ourValues[] = (string) $field['checkedValue'];
+            $ourValues[] = $field['checkedValue'];
         }
 
         $missing = array_diff($bitrixValues, $ourValues);
@@ -754,7 +751,7 @@ class ParityAuditCommand extends Command
      * Every Bitrix site (b_lang) against the Atrium sites: there, in the same
      * folder (DIR), on the same domains, as active.
      */
-    protected function auditSites(): void
+    private function auditSites(): void
     {
         foreach ((new BitrixSites($this->bitrix))->all() as $site) {
             $expected = $site['attributes'];
@@ -797,7 +794,7 @@ class ParityAuditCommand extends Command
         }
     }
 
-    protected function dataStatus(int $bitrixCount, ?int $ourCount): string
+    private function dataStatus(int $bitrixCount, ?int $ourCount): string
     {
         if ($ourCount === null) {
             return 'NO_TABLE';
@@ -805,7 +802,7 @@ class ParityAuditCommand extends Command
         if ($bitrixCount === 0 && $ourCount === 0) {
             return 'OK (empty)';
         }
-        if ($ourCount === 0 && $bitrixCount > 0) {
+        if ($ourCount === 0) {
             return 'NO_DATA';
         }
         if ($ourCount < $bitrixCount) {
@@ -815,7 +812,7 @@ class ParityAuditCommand extends Command
         return 'OK';
     }
 
-    protected function row(
+    private function row(
         string $iblock,
         int $iblockId,
         string $code,
@@ -832,13 +829,13 @@ class ParityAuditCommand extends Command
         return compact('iblock', 'iblockId', 'code', 'name', 'type', 'multiple', 'required', 'model', 'field', 'status', 'detail', 'meta');
     }
 
-    protected function report(): int
+    private function report(): int
     {
-        $format = (string) $this->option('format');
-        $problems = array_values(array_filter(
+        $format = $this->option('format');
+        $problems = array_filter(
             $this->rows,
             static fn (array $r): bool => ! in_array($r['status'], [self::S_OK, self::S_INACTIVE], true)
-        ));
+        );
 
         $content = match ($format) {
             'json' => json_encode([
@@ -853,9 +850,7 @@ class ParityAuditCommand extends Command
 
         if ($content !== null) {
             $path = $this->option('output') ?: storage_path('audit/bitrix-parity.'.($format === 'json' ? 'json' : 'md'));
-            if (! is_dir(dirname($path))) {
-                mkdir(dirname($path), 0775, true);
-            }
+            File::ensureDirectoryExists(dirname($path));
             file_put_contents($path, $content);
             $this->info("Report written to {$path}");
         } else {
@@ -894,7 +889,7 @@ class ParityAuditCommand extends Command
         return $problems === [] && $dataLost === [] && $sitesLost === [] ? self::SUCCESS : self::FAILURE;
     }
 
-    protected function renderTable(array $problems): void
+    private function renderTable(array $problems): void
     {
         if ($this->siteRows !== []) {
             $this->newLine();
@@ -931,7 +926,7 @@ class ParityAuditCommand extends Command
         }
     }
 
-    protected function renderMarkdown(array $problems): string
+    private function renderMarkdown(array $problems): string
     {
         $byStatus = [];
         foreach ($problems as $row) {
