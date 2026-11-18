@@ -44,7 +44,7 @@ class DownloadUploadCommand extends Command
         $host = $this->option('host') ?: config('atrium-bitrix.ftp.host');
         $user = $this->option('user') ?: config('atrium-bitrix.ftp.user');
         $password = $this->option('password') ?: config('atrium-bitrix.ftp.password');
-        $root = rtrim((string) ($this->option('root') ?: config('atrium-bitrix.ftp.root', '/')), '/');
+        $root = (string) ($this->option('root') ?: config('atrium-bitrix.ftp.root', '/'));
 
         if (! $host || ! $user || ! $password) {
             $this->error('FTP credentials not configured. Set BITRIX_FTP_HOST, BITRIX_FTP_USER, BITRIX_FTP_PASSWORD in .env');
@@ -95,7 +95,7 @@ class DownloadUploadCommand extends Command
      * `resize_cache` and `tmp`, which make up most of the directories, are
      * not needed on the new site.
      */
-    protected function downloadFromDatabase(): void
+    private function downloadFromDatabase(): void
     {
         $files = DB::connection(config('atrium-bitrix.connection', 'bitrix'))
             ->table('b_file')
@@ -146,13 +146,13 @@ class DownloadUploadCommand extends Command
         }
     }
 
-    protected function downloadDirectory(string $remotePath): void
+    private function downloadDirectory(string $remotePath): void
     {
         $entries = $this->ftp->listDirectoryDetailed($remotePath);
 
         foreach ($entries as $entry) {
             $name = $entry['name'];
-            $entryPath = rtrim($remotePath, '/').'/'.$name;
+            $entryPath = $remotePath.'/'.$name;
             $localPath = $this->dest.substr($entryPath, strlen('/upload'));
 
             if ($entry['type'] === 'dir') {
@@ -174,7 +174,6 @@ class DownloadUploadCommand extends Command
                     continue;
                 }
 
-                File::ensureDirectoryExists(dirname($localPath));
                 file_put_contents($localPath, $content);
                 $this->line("  <info>+</info> {$entryPath}");
                 $this->downloaded++;
