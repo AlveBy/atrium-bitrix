@@ -127,6 +127,42 @@ final class MigrateSitesTest extends TestCase
         $this->assertSame([['s1', 'DEFAULT_AT_ROOT'], ['s2', 'OK'], ['s3', 'OK']], $this->siteStatuses());
     }
 
+    public function test_the_default_site_goes_first_whatever_its_place_in_bitrix(): void
+    {
+        DB::connection('bitrix')->table('b_lang')->where('LID', 's1')->update(['SORT' => 9]);
+
+        $this->artisan('atrium:bitrix:migrate:sites')
+            ->expectsTable(['Bitrix LID', 'Code', 'DIR', 'Folder', 'Domains'], [
+                ['s1', 'main', '/', '/', 'example.com, www.example.com'],
+                ['s2', 's2', '/en/', '/en/', 'example.com, www.example.com'],
+                ['s3', 's3', '/site2/', '/site2/', '—'],
+            ])
+            ->assertSuccessful();
+    }
+
+    public function test_without_a_default_site_in_atrium_the_bitrix_one_is_made_with_its_code(): void
+    {
+        Site::query()->delete();
+        DB::connection('bitrix')->table('b_lang')->where('LID', 's1')->update(['ACTIVE' => 'N']);
+
+        $this->artisan('atrium:bitrix:migrate:sites')->assertSuccessful();
+
+        $default = Site::query()->where('is_default', true)->sole();
+        $this->assertSame('s1', $default->code);
+        $this->assertTrue($default->active, 'the default site answers every address, so it is never switched off');
+        $this->assertNull($default->folder);
+        $this->assertSame(['s2', 's3'], Site::query()->where('is_default', false)->orderBy('code')->pluck('code')->all());
+    }
+
+    public function test_a_switched_off_default_site_is_switched_on_again(): void
+    {
+        Site::query()->where('is_default', true)->update(['active' => false]);
+
+        $this->artisan('atrium:bitrix:migrate:sites')->assertSuccessful();
+
+        $this->assertTrue(Site::query()->where('is_default', true)->sole()->active);
+    }
+
     public function test_parity_reports_a_site_that_did_not_arrive(): void
     {
         $this->assertSame([['s1', 'DOMAINS_MISMATCH'], ['s2', 'NO_SITE'], ['s3', 'NO_SITE']], $this->siteStatuses());
