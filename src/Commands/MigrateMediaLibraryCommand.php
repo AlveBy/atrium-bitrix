@@ -49,7 +49,7 @@ class MigrateMediaLibraryCommand extends AbstractBitrixCommand
             return self::FAILURE;
         }
 
-        $dryRun = (bool) $this->option('dry-run');
+        $dryRun = $this->option('dry-run');
         $bitrix = $this->getBitrixConnection()->getConnection();
 
         if (! $bitrix->getSchemaBuilder()->hasTable('b_medialib_item')) {
@@ -84,7 +84,7 @@ class MigrateMediaLibraryCommand extends AbstractBitrixCommand
             }
 
             $collection = MediaCollection::updateOrCreate(
-                ['bitrix_id' => (int) $row->ID],
+                ['bitrix_id' => $row->ID],
                 [
                     'name' => (string) $row->NAME,
                     'description' => $row->DESCRIPTION ?: null,
@@ -92,16 +92,16 @@ class MigrateMediaLibraryCommand extends AbstractBitrixCommand
                 ]
             );
 
-            $map[(int) $row->ID] = $collection->id;
+            $map[$row->ID] = $collection->id;
         }
 
         // Parents are set in a second pass: not all collections exist yet in the first.
         if (! $dryRun) {
             foreach ($rows as $row) {
-                $parentBitrixId = (int) ($row->PARENT_ID ?? 0);
+                $parentBitrixId = $row->PARENT_ID;
 
-                if ($parentBitrixId > 0 && isset($map[$parentBitrixId], $map[(int) $row->ID])) {
-                    MediaCollection::whereKey($map[(int) $row->ID])
+                if ($parentBitrixId > 0 && isset($map[$parentBitrixId], $map[$row->ID])) {
+                    MediaCollection::whereKey($map[$row->ID])
                         ->update(['parent_id' => $map[$parentBitrixId]]);
                 }
             }
@@ -135,7 +135,7 @@ class MigrateMediaLibraryCommand extends AbstractBitrixCommand
 
             // A link to a nonexistent file is worse than no entry at all:
             // an editor would pick the image and the site would get a broken src.
-            if (! is_file(public_path(ltrim($url, '/')))) {
+            if (! is_file(public_path($url))) {
                 $missing[] = $url;
 
                 continue;
@@ -150,9 +150,9 @@ class MigrateMediaLibraryCommand extends AbstractBitrixCommand
             $extension = strtolower(pathinfo((string) $row->FILE_NAME, PATHINFO_EXTENSION));
 
             MediaItem::updateOrCreate(
-                ['bitrix_id' => (int) $row->ID],
+                ['bitrix_id' => $row->ID],
                 [
-                    'collection_id' => $collections[(int) ($row->COLLECTION_ID ?? 0)] ?? null,
+                    'collection_id' => $row->COLLECTION_ID === null ? null : ($collections[$row->COLLECTION_ID] ?? null),
                     'name' => $this->itemName($row),
                     'description' => $row->DESCRIPTION ?: null,
                     'keywords' => $row->KEYWORDS ?: null,
@@ -161,7 +161,7 @@ class MigrateMediaLibraryCommand extends AbstractBitrixCommand
                     'path' => null,
                     'extension' => $extension,
                     'mime_type' => $row->CONTENT_TYPE ?: null,
-                    'size' => (int) ($row->FILE_SIZE ?: 0) ?: null,
+                    'size' => $row->FILE_SIZE ?: null,
                     'is_image' => in_array($extension, self::IMAGE_EXTENSIONS, true),
                     'created_at' => $row->DATE_CREATE,
                 ]

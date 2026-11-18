@@ -284,7 +284,7 @@ final class SyntheticBitrix
 
         $schema->create('b_medialib_collection', function (Blueprint $t): void {
             $t->integer('ID')->primary();
-            $t->string('NAME');
+            $t->string('NAME')->nullable();
             $t->text('DESCRIPTION')->nullable();
             $t->char('ACTIVE', 1)->default('Y');
             $t->integer('PARENT_ID')->nullable();
