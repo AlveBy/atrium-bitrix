@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace Atrium\Bitrix\Commands;
 
+use Atrium\Admin\Support\ConfigWriter;
 use Atrium\Bitrix\Generators\ModelGenerator;
 use Atrium\Bitrix\Generators\ReferenceModelGenerator;
 use Atrium\Bitrix\Generators\SectionModelGenerator;
@@ -32,6 +33,13 @@ class GenerateModelsCommand extends AbstractBitrixCommand
     protected SectionModelGenerator $sectionGenerator;
 
     protected ReferenceModelGenerator $referenceGenerator;
+
+    /**
+     * Classes of the models this run wrote, kept or would write, in order.
+     *
+     * @var list<string>
+     */
+    private array $generated = [];
 
     public function handle(): int
     {
@@ -60,6 +68,8 @@ class GenerateModelsCommand extends AbstractBitrixCommand
         if (! empty($hlblockIds)) {
             $this->generateHlblockModels($hlblockIds, $dryRun);
         }
+
+        $this->registerResources($dryRun);
 
         $this->newLine();
         $this->info('Model generation complete!');
@@ -133,19 +143,20 @@ class GenerateModelsCommand extends AbstractBitrixCommand
     private function generateIBlockModel($iblock, bool $dryRun): void
     {
         $naming = $this->getNaming();
+        $namespace = config('atrium-bitrix.model_namespace', 'App\\Models');
 
         // Generate element model
         $modelPath = $this->modelGenerator->getFilePath($iblock);
         $modelContent = $this->modelGenerator->generate($iblock);
 
-        $this->outputModel('Element', $naming->toModelName($iblock->code), $modelPath, $modelContent, $dryRun);
+        $this->outputModel('Element', $namespace.'\\'.$naming->toModelName($iblock->code), $modelPath, $modelContent, $dryRun);
 
         // Generate section model if has sections
         if (! empty($iblock->sections)) {
             $sectionPath = $this->sectionGenerator->getFilePath($iblock);
             $sectionContent = $this->sectionGenerator->generate($iblock);
 
-            $this->outputModel('Section', $naming->toSectionModelName($iblock->code), $sectionPath, $sectionContent, $dryRun);
+            $this->outputModel('Section', $namespace.'\\'.$naming->toSectionModelName($iblock->code), $sectionPath, $sectionContent, $dryRun);
         }
     }
 
@@ -176,18 +187,24 @@ class GenerateModelsCommand extends AbstractBitrixCommand
     private function generateReferenceModel($hlblock, bool $dryRun): void
     {
         $naming = $this->getNaming();
+        $namespace = config('atrium-bitrix.reference_namespace', 'App\\Models\\References');
 
         $modelPath = $this->referenceGenerator->getFilePath($hlblock);
         $modelContent = $this->referenceGenerator->generate($hlblock);
 
-        $this->outputModel('Reference', $naming->hlblockToModelName($hlblock->name), $modelPath, $modelContent, $dryRun);
+        $this->outputModel('Reference', $namespace.'\\'.$naming->hlblockToModelName($hlblock->name), $modelPath, $modelContent, $dryRun);
     }
 
     /**
      * Output model (write or display)
      */
-    private function outputModel(string $type, string $name, string $path, string $content, bool $dryRun): void
+    private function outputModel(string $type, string $class, string $path, string $content, bool $dryRun): void
     {
+        $name = class_basename($class);
+
+        // Kept or not, the model is there afterwards: it belongs in the menu.
+        $this->generated[] = $class;
+
         if ($dryRun) {
             $this->line("  Would create {$type} model: {$name}");
             $this->line("  Path: {$path}");
@@ -217,5 +234,76 @@ class GenerateModelsCommand extends AbstractBitrixCommand
 
         $this->info("  Created: {$name}");
         $this->line("  Path: {$path}");
+    }
+
+    /**
+     * List the models in config/atrium.php → resources, so they are in the
+     * admin's menu, as atrium:make-module does. Directory (highload) models
+     * too: editors add a brand or a colour there, as they did in Bitrix.
+     * A model already listed, even commented out, is left as it is.
+     */
+    private function registerResources(bool $dryRun): void
+    {
+        $classes = array_unique($this->generated);
+
+        if ($classes === []) {
+            return;
+        }
+
+        $path = config_path('atrium.php');
+        $missing = array_filter($classes, fn (string $class): bool => ! $this->isListed($class, $path));
+
+        $this->newLine();
+
+        if (! is_file($path) && $missing !== []) {
+            $this->warn("config/atrium.php is not published (php artisan atrium:install). Add the models to its 'resources' by hand:");
+            $this->listByHand($missing);
+
+            return;
+        }
+
+        if (! $dryRun) {
+            // Each one goes to the top of the list: added backwards, they keep the order they were generated in.
+            foreach (array_reverse($missing) as $class) {
+                if (! ConfigWriter::addResource($class, $path)) {
+                    $this->warn("Could not find 'resources' in config/atrium.php. Add the models to it by hand:");
+                    $this->listByHand($missing);
+
+                    return;
+                }
+            }
+        }
+
+        $this->info('Registering models in config/atrium.php...');
+
+        foreach ($classes as $class) {
+            $this->line(match (true) {
+                ! in_array($class, $missing, true) => "  Already listed: {$class}",
+                $dryRun => "  Would add: {$class}",
+                default => "  Added: {$class}",
+            });
+        }
+    }
+
+    private function isListed(string $class, string $path): bool
+    {
+        // The loaded config also knows entries written with a `use` import.
+        $loaded = array_map(static fn (string $listed): string => ltrim($listed, '\\'), config('atrium.resources', []));
+
+        if (in_array($class, $loaded, true)) {
+            return true;
+        }
+
+        return ConfigWriter::hasResource($class, $path);
+    }
+
+    /**
+     * @param  array<string>  $classes
+     */
+    private function listByHand(array $classes): void
+    {
+        foreach ($classes as $class) {
+            $this->line("    \\{$class}::class,");
+        }
     }
 }

@@ -279,6 +279,7 @@ final class GenerateCommandsTest extends SyntheticTestCase
         $this->artisan('atrium:bitrix:generate:models')
             ->expectsOutput('No IBlocks found in Bitrix database.')
             ->expectsOutput('No Highload Blocks found in Bitrix database.')
+            ->doesntExpectOutputToContain('config/atrium.php')
             ->expectsOutput('Model generation complete!')
             ->assertSuccessful();
 
@@ -401,6 +402,12 @@ final class GenerateCommandsTest extends SyntheticTestCase
           Would create Reference model: Brands
           Path: WORK/models/References/Brands.php
 
+        config/atrium.php is not published (php artisan atrium:install). Add the models to its 'resources' by hand:
+            \Atrium\Bitrix\Tests\Generated\News::class,
+            \Atrium\Bitrix\Tests\Generated\Product::class,
+            \Atrium\Bitrix\Tests\Generated\ProductSection::class,
+            \Atrium\Bitrix\Tests\Generated\References\Brands::class,
+
         Model generation complete!
 
         TXT;
@@ -421,6 +428,9 @@ final class GenerateCommandsTest extends SyntheticTestCase
           Path: WORK/models/News.php
         Generating Highload Block models...
         Highload Block 99 not found
+
+        config/atrium.php is not published (php artisan atrium:install). Add the models to its 'resources' by hand:
+            \Atrium\Bitrix\Tests\Generated\News::class,
 
         Model generation complete!
 

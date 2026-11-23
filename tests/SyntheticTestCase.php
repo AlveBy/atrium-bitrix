@@ -47,8 +47,11 @@ abstract class SyntheticTestCase extends TestCase
         mkdir($this->workDir.'/models', 0777, true);
         mkdir($this->workDir.'/migrations', 0777, true);
         mkdir($this->workDir.'/public', 0777, true);
+        mkdir($this->workDir.'/config', 0777, true);
 
         $app->usePublicPath($this->workDir.'/public');
+        // Where generate:models looks for config/atrium.php; unpublished until a test copies it there.
+        $app->useConfigPath($this->workDir.'/config');
 
         $config = $app['config'];
         $config->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));

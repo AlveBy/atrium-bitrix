@@ -29,6 +29,8 @@ php artisan atrium:bitrix:parity                # before against after
 
 `atrium:bitrix:migrate` runs the whole sequence. Every command asks which iblocks to take; without a terminal (`--no-interaction`) it takes all of them.
 
+`generate:models` lists every model it writes in `config/atrium.php` → `resources`, so they are in the admin's menu: iblock elements, their sections and the highload directories, which editors keep filling in (brands, colours). A model already listed is not added again; a commented-out line keeps it out of the menu. Without a published `config/atrium.php` the command prints the lines to add by hand; `--dry-run` writes nothing.
+
 ## What moves
 
 - Sites (`b_lang`) with their domains (`b_lang_domain`, the server name first). LID becomes the code, `DIR` becomes the folder: `DIR` `/` is no folder, `/site2/` opens the site at `example.com/site2/` as before. The Bitrix default site becomes the Atrium default site; Atrium opens the default site at the root, so a default site kept in a folder (`/ru/`) moves to the root with a warning, and its old addresses need a redirect. Run it again after changes in Bitrix: sites are matched by code.
