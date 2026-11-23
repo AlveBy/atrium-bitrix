@@ -69,7 +69,24 @@ Migrating elements: Products -> products
 
 Data migration complete!
 
-TEXT, $output->fetch());
+TEXT, $this->withoutInBetweenFrames($output->fetch()));
+    }
+
+    public function test_only_the_frames_between_the_first_and_the_last_are_dropped(): void
+    {
+        $frames = " 0/3 [░░░]   0%\n 2/3 [▓▓░]  66%\n 3/3 [▓▓▓] 100%\nDone 2/3 66%\n";
+
+        $this->assertSame(" 0/3 [░░░]   0%\n 3/3 [▓▓▓] 100%\nDone 2/3 66%\n", $this->withoutInBetweenFrames($frames));
+    }
+
+    /**
+     * A progress bar redraws in between when a step takes longer than its
+     * redraw interval, which a slow CI runner sometimes does: only the first
+     * and the last frame are the same on every machine.
+     */
+    private function withoutInBetweenFrames(string $output): string
+    {
+        return (string) preg_replace('/^ (\d+)\/(?!\1\b)\d+ \[[▓░]+\]\s+(?!0%)\d+%\n/mu', '', $output);
     }
 
     public function test_a_block_that_is_missing_skipped_or_empty_does_not_stop_the_ones_after_it(): void
