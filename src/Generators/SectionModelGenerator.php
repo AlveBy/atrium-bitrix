@@ -236,7 +236,7 @@ PHP);
             ['name' => 'code', 'tab' => 'params', 'line' => "SlugField::make('code')->label(".Labels::standard('code').")->from('name')"],
             ['name' => 'active', 'tab' => 'params', 'line' => "CheckboxField::make('active')->label(".Labels::standard('active').')->default(true)'],
             ['name' => 'sort', 'tab' => 'params', 'line' => "NumberField::make('sort')->label(".Labels::standard('sort').')->default(500)'],
-            ['name' => 'description', 'tab' => 'content', 'line' => "ContentField::make('description')->label(".Labels::standard('description').')'],
+            ['name' => 'description', 'tab' => 'content', 'line' => "ContentField::make('description')->label(".Labels::standard('description').')->ai()'],
             ['name' => 'picture', 'tab' => 'content', 'line' => "ImageField::make('picture')->label(".Labels::standard('picture').')'],
             ['name' => 'detail_picture', 'tab' => 'content', 'line' => "ImageField::make('detail_picture')->label(".Labels::standard('detail_picture').')'],
         ];

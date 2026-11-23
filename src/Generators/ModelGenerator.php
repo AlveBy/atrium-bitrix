@@ -593,9 +593,9 @@ class ModelGenerator
         }
 
         $add('preview_picture', "ImageField::make('preview_picture')->label(".Labels::standard('preview_picture').')', 'preview');
-        $add('preview_text', "ContentField::make('preview_text')->label(".Labels::standard('preview_text').')', 'preview');
+        $add('preview_text', "ContentField::make('preview_text')->label(".Labels::standard('preview_text').")->ai('preview', from: 'detail_text')", 'preview');
         $add('detail_picture', "ImageField::make('detail_picture')->label(".Labels::standard('detail_picture').')', 'detail');
-        $add('detail_text', "ContentField::make('detail_text')->label(".Labels::standard('detail_text').')', 'detail');
+        $add('detail_text', "ContentField::make('detail_text')->label(".Labels::standard('detail_text').')->ai()', 'detail');
 
         foreach ($iblock->properties as $property) {
             $column = $this->naming->toColumnName($property->code);

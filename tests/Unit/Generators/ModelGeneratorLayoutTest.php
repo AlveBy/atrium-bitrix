@@ -57,7 +57,7 @@ final class ModelGeneratorLayoutTest extends SyntheticTestCase
 
         $this->assertStringContainsString("['name' => 'params', 'label' => 'Product'],\n        ];", $model);
         $this->assertStringContainsString("ImageField::make('preview_picture')->label(__('atrium::fields.standard.preview_picture'))->tab('params'),", $model);
-        $this->assertStringContainsString("ContentField::make('detail_text')->label(__('atrium::fields.standard.detail_text'))->tab('params'),", $model);
+        $this->assertStringContainsString("ContentField::make('detail_text')->label(__('atrium::fields.standard.detail_text'))->ai()->tab('params'),", $model);
         $this->assertStringNotContainsString("->tab('preview')", $model);
         $this->assertStringNotContainsString("->tab('detail')", $model);
         // what the form lists comes first, in its order; what it does not, after

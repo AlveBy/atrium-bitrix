@@ -170,7 +170,7 @@ class ProductSection extends Model implements Administrable
             NumberField::make('sort')->label(__('atrium::fields.standard.sort'))->default(500)->tab('params'),
 
             // Description
-            ContentField::make('description')->label(__('atrium::fields.standard.description'))->tab('content'),
+            ContentField::make('description')->label(__('atrium::fields.standard.description'))->ai()->tab('content'),
             ImageField::make('picture')->label(__('atrium::fields.standard.picture'))->tab('content'),
             ImageField::make('detail_picture')->label(__('atrium::fields.standard.detail_picture'))->tab('content'),
 
