@@ -261,7 +261,11 @@ final class MigrateSeoCommandTest extends SyntheticTestCase
 
         TXT;
 
-        $this->assertSame($expected, Artisan::output());
+        // The bar redraws a step in between only when that step took long (a slow
+        // database), so the steps between the first and the last are left out.
+        $output = (string) preg_replace('#^ [1-9]\d*/2 \[[^\n]*\]\s+\d+%\n(?= 2/2 )#mu', '', Artisan::output());
+
+        $this->assertSame($expected, $output);
     }
 
     public function test_a_title_is_cut_by_characters_not_by_bytes(): void
